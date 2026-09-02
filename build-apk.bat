@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ============================================================
-echo   Prime Solar Quotation Builder - Android APK Build Script
+echo   Prime Solar Quotation Builder - Standalone APK Build Script
 echo ============================================================
 
 set "PROJECT_DIR=%~dp0"
@@ -33,9 +33,9 @@ if exist "%PROJECT_DIR%android" (
     echo sdk.dir=!ANDROID_HOME:\=\\!> "%PROJECT_DIR%android\local.properties"
 )
 
-echo [STEP 2/3] Building Android Debug APK with Gradle...
+echo [STEP 2/3] Compiling Standalone Offline Release APK (No Metro Server Needed)...
 cd android
-call gradlew assembleDebug --no-daemon
+call gradlew assembleRelease --no-daemon
 if %errorlevel% neq 0 (
     echo [ERROR] Gradle APK compilation failed!
     cd ..
@@ -45,15 +45,16 @@ if %errorlevel% neq 0 (
 
 cd ..
 
-set "OUTPUT_APK=%PROJECT_DIR%android\app\build\outputs\apk\debug\app-debug.apk"
-set "FINAL_APK=%PROJECT_DIR%PrimeSolar-debug.apk"
+set "OUTPUT_APK=%PROJECT_DIR%android\app\build\outputs\apk\release\app-release.apk"
+set "FINAL_APK=%PROJECT_DIR%PrimeSolar.apk"
 
 if exist "%OUTPUT_APK%" (
     copy /y "%OUTPUT_APK%" "%FINAL_APK%" >nul
     echo.
     echo ============================================================
-    echo   [SUCCESS] Prime Solar APK compiled successfully!
+    echo   [SUCCESS] Standalone Offline APK compiled successfully!
     echo   File: %FINAL_APK%
+    echo   (You can install and run this APK on any phone without any server)
     echo ============================================================
 ) else (
     echo [ERROR] Could not find compiled APK at: %OUTPUT_APK%
