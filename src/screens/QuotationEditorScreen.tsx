@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,15 +21,12 @@ import {
   Quotation,
   LineItem,
   SystemType,
-  BatteryOption,
   PaymentTerms,
-  ReturnOnInvestment,
   ProductionData,
 } from '../types';
-import { SIMPLE_HYBRID_DEFAULT_BATTERIES } from '../data/seedTemplates';
+import { PRESET_BATTERY_ITEMS } from '../data/seedTemplates';
 import {
   formatCurrency,
-  calculateSolarSizing,
   calculateProductionData,
 } from '../utils/solarCalculations';
 
@@ -37,7 +35,6 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
   const passedQuotation = route?.params?.quotation;
   const templateId = route?.params?.templateId || 'template-simple-hybrid';
   const prefillKw = route?.params?.prefillKw || '10';
-  const prefillRoi = route?.params?.prefillRoi;
   const prefillPanels = route?.params?.prefillPanels;
 
   const templates = usePrimeStore((state) => state.templates);
@@ -75,15 +72,8 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
       : []
   );
 
-  // Battery Options state (3 default standard options for Simple Hybrid)
-  const [batteryOptions, setBatteryOptions] = useState<BatteryOption[]>(
-    existingQuote?.batteryOptions?.length
-      ? existingQuote.batteryOptions
-      : SIMPLE_HYBRID_DEFAULT_BATTERIES
-  );
-  const [selectedBatteryId, setSelectedBatteryId] = useState<string | undefined>(
-    existingQuote?.selectedBatteryId || (selectedTemplate.formatKind === 'SIMPLE_HYBRID' ? 'bat-5kwh' : undefined)
-  );
+  // Battery Preset Picker Modal State
+  const [showBatteryPicker, setShowBatteryPicker] = useState(false);
 
   // Payment terms
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerms>(
@@ -106,9 +96,6 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
   );
 
   // Collapsible accordion states
-  const [showBatterySection, setShowBatterySection] = useState(
-    selectedTemplate.hasBatterySection
-  );
   const [showPaymentSection, setShowPaymentSection] = useState(false);
   const [showProductionSection, setShowProductionSection] = useState(true);
 
@@ -139,6 +126,22 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
     setLineItems([...lineItems, newItem]);
   };
 
+  const handleAddPresetBattery = (preset: typeof PRESET_BATTERY_ITEMS[0]) => {
+    const nextSr = lineItems.length + 1;
+    const newBatteryItem: LineItem = {
+      id: `li_bat_${Date.now()}_${nextSr}`,
+      srNo: nextSr,
+      description: preset.description,
+      qty: preset.qty,
+      rate: preset.rate,
+      total: preset.total,
+      remarks: preset.remarks,
+      isEditableDescription: true,
+    };
+    setLineItems([...lineItems, newBatteryItem]);
+    setShowBatteryPicker(false);
+  };
+
   const handleDeleteRow = (index: number) => {
     const updated = lineItems
       .filter((_, idx) => idx !== index)
@@ -156,38 +159,6 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
     }
     updated[index] = item;
     setLineItems(updated);
-  };
-
-  const handleAddBattery = () => {
-    const newBat: BatteryOption = {
-      id: `bat_${Date.now()}`,
-      brand: 'Lithium Battery',
-      capacityKwh: 5,
-      voltage: '51.2V',
-      ampHours: '100Ah',
-      rate: 250000,
-      warranty: '5 Years Official Warranty',
-    };
-    setBatteryOptions([...batteryOptions, newBat]);
-    setShowBatterySection(true);
-  };
-
-  const handleDeleteBattery = (id: string) => {
-    const updated = batteryOptions.filter((b) => b.id !== id);
-    setBatteryOptions(updated);
-    if (selectedBatteryId === id) {
-      setSelectedBatteryId(undefined);
-    }
-  };
-
-  const handleUpdateBattery = (id: string, field: keyof BatteryOption, val: any) => {
-    const updated = batteryOptions.map((b) => {
-      if (b.id === id) {
-        return { ...b, [field]: val };
-      }
-      return b;
-    });
-    setBatteryOptions(updated);
   };
 
   const buildQuotationObject = (): Quotation => {
@@ -214,8 +185,7 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
       panelCount,
       inverterBrand: 'Solis / GoodWe IP66',
       lineItems,
-      batteryOptions,
-      selectedBatteryId,
+      batteryOptions: [],
       paymentTerms,
       roi: {
         dailyProductionUnits: finalProdData.dailyUnitsText,
@@ -268,8 +238,6 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
     await saveQuotation(quote);
     navigation.navigate('Preview', { quotation: quote });
   };
-
-  const selectedBattery = batteryOptions.find((b) => b.id === selectedBatteryId);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -346,82 +314,105 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
           </View>
         </NeumorphicCard>
 
-        {/* Itemized Quotation Line Items Grid */}
+        {/* Itemized Quotation Line Items Grid (Includes Hardware & Batteries) */}
         <NeumorphicCard style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <Text style={styles.sectionTitle}>LINE ITEMS ({lineItems.length})</Text>
-            <TouchableOpacity style={styles.addRowBtn} onPress={handleAddRow} activeOpacity={0.8}>
-              <Ionicons name="add" size={16} color="#FFFFFF" style={{ marginRight: 2 }} />
-              <Text style={styles.addRowText}>Add Row</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <TouchableOpacity
+                style={[styles.addRowBtn, { backgroundColor: colors.secondaryContainer }]}
+                onPress={() => setShowBatteryPicker(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="battery-charging" size={15} color="#FFFFFF" style={{ marginRight: 3 }} />
+                <Text style={styles.addRowText}>+ Battery</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.addRowBtn} onPress={handleAddRow} activeOpacity={0.8}>
+                <Ionicons name="add" size={16} color="#FFFFFF" style={{ marginRight: 2 }} />
+                <Text style={styles.addRowText}>+ Item</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={{ gap: 10 }}>
-            {lineItems.map((item, index) => (
-              <View key={item.id || index} style={styles.lineItemRowCard}>
-                <View style={styles.lineItemRowHeader}>
-                  <View style={styles.srBadge}>
-                    <Text style={styles.srBadgeText}>
-                      {item.srNo < 10 ? '0' + item.srNo : item.srNo}
-                    </Text>
+            {lineItems.map((item, index) => {
+              const isBatteryItem =
+                item.description.toLowerCase().includes('battery') ||
+                item.description.toLowerCase().includes('lithium');
+
+              return (
+                <View
+                  key={item.id || index}
+                  style={[
+                    styles.lineItemRowCard,
+                    isBatteryItem && { backgroundColor: '#FFFDF5', borderColor: '#FDE68A' },
+                  ]}
+                >
+                  <View style={styles.lineItemRowHeader}>
+                    <View style={[styles.srBadge, isBatteryItem && { backgroundColor: colors.secondaryContainer }]}>
+                      <Text style={styles.srBadgeText}>
+                        {item.srNo < 10 ? '0' + item.srNo : item.srNo}
+                      </Text>
+                    </View>
+                    <TextInput
+                      style={[styles.descInput, { flex: 1, marginLeft: 8 }, isBatteryItem && { fontWeight: '700' }]}
+                      value={item.description}
+                      onChangeText={(v) => handleUpdateRow(index, 'description', v)}
+                      placeholder="Item Description..."
+                    />
+                    <TouchableOpacity
+                      style={styles.deleteRowBtn}
+                      onPress={() => handleDeleteRow(index)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="trash-outline" size={18} color={colors.error} />
+                    </TouchableOpacity>
                   </View>
-                  <TextInput
-                    style={[styles.descInput, { flex: 1, marginLeft: 8 }]}
-                    value={item.description}
-                    onChangeText={(v) => handleUpdateRow(index, 'description', v)}
-                    placeholder="Item Description..."
-                  />
-                  <TouchableOpacity
-                    style={styles.deleteRowBtn}
-                    onPress={() => handleDeleteRow(index)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="trash-outline" size={18} color={colors.error} />
-                  </TouchableOpacity>
+
+                  <View style={styles.lineItemInputsRow}>
+                    <View style={{ width: '26%' }}>
+                      <Text style={styles.microLabel}>Qty</Text>
+                      <TextInput
+                        style={styles.microInput}
+                        value={item.qty}
+                        onChangeText={(v) => handleUpdateRow(index, 'qty', v)}
+                        placeholder="e.g. 18 or 01"
+                      />
+                    </View>
+
+                    <View style={{ flex: 1, marginHorizontal: 6 }}>
+                      <Text style={styles.microLabel}>Total (Rs.) *</Text>
+                      <TextInput
+                        style={[styles.microInput, { fontWeight: '700', color: colors.primaryContainer }]}
+                        keyboardType="numeric"
+                        value={item.total?.toString() || '0'}
+                        onChangeText={(v) => handleUpdateRow(index, 'total', parseFloat(v) || 0)}
+                        placeholder="Total (Rs)"
+                      />
+                    </View>
+
+                    <View style={{ width: '38%' }}>
+                      <Text style={styles.microLabel}>Remarks</Text>
+                      <TextInput
+                        style={styles.microInput}
+                        value={item.remarks}
+                        onChangeText={(v) => handleUpdateRow(index, 'remarks', v)}
+                        placeholder="e.g. 15 Yrs Warranty"
+                      />
+                    </View>
+                  </View>
                 </View>
-
-                <View style={styles.lineItemInputsRow}>
-                  <View style={{ width: '28%' }}>
-                    <Text style={styles.microLabel}>Qty</Text>
-                    <TextInput
-                      style={styles.microInput}
-                      value={item.qty}
-                      onChangeText={(v) => handleUpdateRow(index, 'qty', v)}
-                      placeholder="e.g. 18 or 140m"
-                    />
-                  </View>
-
-                  <View style={{ flex: 1, marginHorizontal: 6 }}>
-                    <Text style={styles.microLabel}>Total (Rs.) *</Text>
-                    <TextInput
-                      style={[styles.microInput, { fontWeight: '700', color: colors.primaryContainer }]}
-                      keyboardType="numeric"
-                      value={item.total?.toString() || '0'}
-                      onChangeText={(v) => handleUpdateRow(index, 'total', parseFloat(v) || 0)}
-                      placeholder="Total (Rs)"
-                    />
-                  </View>
-
-                  <View style={{ width: '38%' }}>
-                    <Text style={styles.microLabel}>Remarks</Text>
-                    <TextInput
-                      style={styles.microInput}
-                      value={item.remarks}
-                      onChangeText={(v) => handleUpdateRow(index, 'remarks', v)}
-                      placeholder="e.g. 15 Yrs Warranty"
-                    />
-                  </View>
-                </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </NeumorphicCard>
 
         {/* Live Quotation Summary Card */}
         <NeumorphicCard style={styles.summaryCard}>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryVal}>Rs. {formatCurrency(subtotal)}</Text>
+            <Text style={styles.summaryLabel}>Total Line Items</Text>
+            <Text style={styles.summaryVal}>{lineItems.length} Components</Text>
           </View>
 
           <View style={styles.summaryDivider} />
@@ -430,123 +421,7 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
             <Text style={styles.grandLabel}>Total Quotation</Text>
             <Text style={styles.grandVal}>Rs. {formatCurrency(grandTotal)}</Text>
           </View>
-
-          {selectedTemplate.formatKind === 'SIMPLE_HYBRID' && selectedBattery && (
-            <View style={{ marginTop: 8, backgroundColor: '#FFFBEB', padding: 8, borderRadius: 8 }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: '#92400E' }}>
-                With {selectedBattery.brand} {selectedBattery.capacityKwh}kWh ({selectedBattery.ampHours || '100Ah'}) Battery:
-              </Text>
-              <Text style={{ fontSize: 16, fontWeight: '900', color: colors.secondaryContainer }}>
-                Rs. {formatCurrency(grandTotal + selectedBattery.rate)}
-              </Text>
-            </View>
-          )}
         </NeumorphicCard>
-
-        {/* Battery Options (3 Standard Options for Simple Hybrid) */}
-        {selectedTemplate.hasBatterySection && (
-          <NeumorphicCard style={styles.accordionCard}>
-            <View style={styles.accordionHeaderWrapper}>
-              <TouchableOpacity
-                style={styles.accordionHeader}
-                onPress={() => setShowBatterySection(!showBatterySection)}
-              >
-                <View style={styles.accordionTitleGroup}>
-                  <Ionicons name="battery-charging" size={20} color={colors.secondaryContainer} />
-                  <Text style={styles.accordionTitle}>Battery Options ({batteryOptions.length})</Text>
-                </View>
-                <Ionicons
-                  name={showBatterySection ? 'chevron-up' : 'chevron-down'}
-                  size={20}
-                  color={colors.outline}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.addBatteryBtn} onPress={handleAddBattery} activeOpacity={0.8}>
-                <Ionicons name="add" size={16} color="#FFFFFF" style={{ marginRight: 2 }} />
-                <Text style={styles.addBatteryText}>+ Add</Text>
-              </TouchableOpacity>
-            </View>
-
-            {showBatterySection && (
-              <View style={styles.accordionBody}>
-                <Text style={styles.accordionSub}>
-                  Default specifications locked. Enter brand name and rate. Select which battery highlights on Page 1:
-                </Text>
-
-                <View style={{ gap: 10 }}>
-                  {batteryOptions.map((bat) => {
-                    const isSelected = selectedBatteryId === bat.id;
-                    return (
-                      <View
-                        key={bat.id}
-                        style={[
-                          styles.batteryOptionCard,
-                          isSelected && styles.batteryOptionSelected,
-                        ]}
-                      >
-                        <View style={styles.batteryCardTop}>
-                          <TouchableOpacity
-                            style={styles.batterySelectBtn}
-                            onPress={() => setSelectedBatteryId(isSelected ? undefined : bat.id)}
-                            activeOpacity={0.7}
-                          >
-                            <Ionicons
-                              name={isSelected ? 'radio-button-on' : 'radio-button-off'}
-                              size={20}
-                              color={isSelected ? colors.secondaryContainer : colors.outline}
-                            />
-                            <Text style={[styles.batterySelectText, isSelected && styles.batterySelectTextActive]}>
-                              {isSelected ? 'Selected for Page 1 Highlight' : 'Tap to Highlight on Page 1'}
-                            </Text>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-                            style={styles.deleteBatteryBtn}
-                            onPress={() => handleDeleteBattery(bat.id)}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          >
-                            <Ionicons name="trash-outline" size={18} color={colors.error} />
-                          </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.batteryInputsRow}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.microLabel}>Brand / Model</Text>
-                            <TextInput
-                              style={styles.batteryInput}
-                              value={bat.brand}
-                              onChangeText={(v) => handleUpdateBattery(bat.id, 'brand', v)}
-                              placeholder="e.g. YJC or Dyness"
-                            />
-                          </View>
-                          <View style={{ width: '32%', marginHorizontal: 6 }}>
-                            <Text style={styles.microLabel}>Specs</Text>
-                            <TextInput
-                              style={[styles.batteryInput, { backgroundColor: '#F1F5F9' }]}
-                              value={`${bat.capacityKwh}kWh ${bat.ampHours || ''}`}
-                              editable={false}
-                            />
-                          </View>
-                          <View style={{ width: '34%' }}>
-                            <Text style={styles.microLabel}>Rate (Rs.) *</Text>
-                            <TextInput
-                              style={[styles.batteryInput, { fontWeight: '700', color: colors.primaryContainer }]}
-                              keyboardType="numeric"
-                              value={bat.rate?.toString() || '0'}
-                              onChangeText={(v) => handleUpdateBattery(bat.id, 'rate', parseFloat(v) || 0)}
-                              placeholder="230000"
-                            />
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-          </NeumorphicCard>
-        )}
 
         {/* Universal Production Data Table Card */}
         <NeumorphicCard style={styles.accordionCard}>
@@ -570,7 +445,7 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
           {showProductionSection && (
             <View style={styles.accordionBody}>
               <Text style={styles.accordionSub}>
-                Calculated based on Tier-1 PV capacity (5 units/kW/day @ Rs. 65/unit):
+                Calculated live based on Tier-1 PV capacity (5 units/kW/day @ Rs. 65/unit):
               </Text>
 
               <View style={styles.prodDataBox}>
@@ -655,6 +530,40 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
           )}
         </NeumorphicCard>
       </ScrollView>
+
+      {/* Preset Battery Quick Selector Modal */}
+      <Modal visible={showBatteryPicker} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Lithium Battery to Add</Text>
+              <TouchableOpacity onPress={() => setShowBatteryPicker(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close" size={24} color={colors.outline} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSub}>
+              Tap any battery model below to insert it directly into your itemized quotation table:
+            </Text>
+
+            <View style={{ gap: 8, marginTop: 10 }}>
+              {PRESET_BATTERY_ITEMS.map((preset, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={styles.presetBatteryCard}
+                  onPress={() => handleAddPresetBattery(preset)}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.presetName}>{preset.description}</Text>
+                    <Text style={styles.presetWarranty}>{preset.remarks}</Text>
+                  </View>
+                  <Text style={styles.presetRate}>+ Rs. {formatCurrency(preset.total)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Fixed Bottom Action Bar */}
       <View style={styles.bottomBar}>
@@ -879,75 +788,6 @@ const styles = StyleSheet.create({
     color: colors.outline,
     marginBottom: 10,
   },
-  accordionHeaderWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingRight: 14,
-  },
-  addBatteryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primaryContainer,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  addBatteryText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  batteryOptionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  batteryOptionSelected: {
-    borderColor: colors.secondaryContainer,
-    backgroundColor: '#FFFBEB',
-  },
-  batteryCardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  batterySelectBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  batterySelectText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.outline,
-    marginLeft: 6,
-  },
-  batterySelectTextActive: {
-    color: colors.secondaryContainer,
-    fontWeight: '800',
-  },
-  deleteBatteryBtn: {
-    padding: 4,
-    marginLeft: 8,
-  },
-  batteryInput: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    height: 36,
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.onSurface,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  batteryInputsRow: {
-    flexDirection: 'row',
-  },
   prodDataBox: {
     backgroundColor: '#F8FAFC',
     borderRadius: 12,
@@ -974,6 +814,66 @@ const styles = StyleSheet.create({
   },
   termsInputsRow: {
     flexDirection: 'row',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    maxWidth: 480,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.primaryContainer,
+  },
+  modalSub: {
+    fontSize: 12,
+    color: colors.outline,
+    lineHeight: 16,
+  },
+  presetBatteryCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  presetName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.onSurface,
+  },
+  presetWarranty: {
+    fontSize: 11,
+    color: colors.outline,
+    marginTop: 2,
+  },
+  presetRate: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.secondaryContainer,
   },
   bottomBar: {
     position: 'absolute',

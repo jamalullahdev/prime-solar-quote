@@ -1,10 +1,39 @@
-import * as Print from 'expo-print';
-import { Platform } from 'react-native';
-import { Quotation, ProductionData } from '../types';
-import { formatCurrency, calculateProductionData } from './solarCalculations';
-import { LOGO_BASE64 } from '../assets/logoBase64';
+const fs = require('fs');
+const path = require('path');
 
-export function generateQuotationHTML(quotation: Quotation): string {
+// Read logo image as base64
+const logoPath = path.join(__dirname, 'assets', 'logo.png');
+const logoBuffer = fs.readFileSync(logoPath);
+const LOGO_BASE64 = `data:image/png;base64,${logoBuffer.toString('base64')}`;
+
+function formatCurrency(amount) {
+  if (amount === null || amount === undefined || isNaN(amount)) return '0';
+  return Math.round(amount).toLocaleString('en-US');
+}
+
+function calculateProductionData(panelCount, panelWattage = 625, capacityKwFallback = 10, grandTotal = 0) {
+  const totalWattage = panelCount > 0 && panelWattage > 0 ? panelCount * panelWattage : capacityKwFallback * 1000;
+  const panelKw = totalWattage / 1000;
+  const dailyUnits = Math.round(panelKw * 5);
+  const monthlyUnits = Math.round(dailyUnits * 30);
+  const monthlySavings = Math.round(monthlyUnits * 65);
+
+  const lowSavings = Math.round(monthlySavings * 0.98);
+  const highSavings = Math.round(monthlySavings * 1.025);
+
+  const paybackMonths = monthlySavings > 0 && grandTotal > 0 ? Math.round(grandTotal / monthlySavings) : 18;
+  const lowPayback = Math.max(10, Math.round(paybackMonths * 0.9));
+  const highPayback = Math.max(lowPayback + 2, Math.round(paybackMonths * 1.05));
+
+  return {
+    dailyUnitsText: `${dailyUnits} units approx.`,
+    monthlyUnitsText: `${monthlyUnits.toLocaleString('en-US')} units approx.`,
+    monthlySavingsText: `Rs ${formatCurrency(lowSavings)} – ${formatCurrency(highSavings)}`,
+    roiMonthsText: `${lowPayback} – ${highPayback} months`,
+  };
+}
+
+function generateHTML(quotation) {
   const customerName = quotation.customer.name || 'Valued Customer';
   const customerAddress = quotation.customer.address
     ? ` (${quotation.customer.address}${quotation.customer.city ? ', ' + quotation.customer.city : ''})`
@@ -26,20 +55,16 @@ export function generateQuotationHTML(quotation: Quotation): string {
   const totalItems = quotation.lineItems.length;
   const isMultiPage = totalItems > 10;
 
-  // Calculate live Production Data
-  const prodData: ProductionData =
-    quotation.productionData ||
-    calculateProductionData(
-      quotation.panelCount || 0,
-      parseFloat(quotation.panelWattage) || 625,
-      parseFloat(quotation.capacityKw) || 10,
-      quotation.grandTotal
-    );
+  const prodData = calculateProductionData(
+    quotation.panelCount || 0,
+    parseFloat(quotation.panelWattage) || 625,
+    parseFloat(quotation.capacityKw) || 10,
+    quotation.grandTotal
+  );
 
   const capacityKwUpper = (quotation.capacityKw || '10').toUpperCase().replace('KW', '');
 
-  // Helper to render table row with large readable typography
-  const renderRow = (item: any, idx: number) => `
+  const renderRow = (item, idx) => `
     <tr>
       <td style="text-align: center; padding: 7.5px 5px; border: 1.5px solid #000; font-size: 12px; font-weight: 700;">${
         item.srNo < 10 ? '0' + item.srNo : item.srNo || idx + 1
@@ -62,7 +87,6 @@ export function generateQuotationHTML(quotation: Quotation): string {
     </tr>
   `;
 
-  // Production Data Table HTML with large legible font
   const productionTableHtml = `
     <div class="section-header-p2" style="margin-top: 5mm; margin-bottom: 2.5mm;">
       ${capacityKwUpper}KW SYSTEM PRODUCTION DATA:
@@ -89,7 +113,6 @@ export function generateQuotationHTML(quotation: Quotation): string {
     </table>
   `;
 
-  // Mode of Payment Block
   const paymentTermsHtml = `
     <div class="section-header-p2" style="margin-top: 4mm; margin-bottom: 2.5mm;">MODE OF PAYMENT:</div>
     <ul class="bullet-list">
@@ -99,7 +122,6 @@ export function generateQuotationHTML(quotation: Quotation): string {
     </ul>
   `;
 
-  // Total Row HTML
   const totalRowHtml = `
     <tr class="total-row">
       <td colspan="4" style="text-align: center; font-size: 13.5px; font-weight: 900; letter-spacing: 0.5px;">Total</td>
@@ -128,6 +150,7 @@ export function generateQuotationHTML(quotation: Quotation): string {
     <html>
     <head>
       <meta charset="utf-8" />
+      <title>Quotation - ${customerName}</title>
       <style>
         @page {
           size: A4;
@@ -140,8 +163,9 @@ export function generateQuotationHTML(quotation: Quotation): string {
           font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
         body {
-          background-color: #ffffff;
+          background-color: #CBD5E1;
           color: #1a1a1a;
+          padding: 24px 0;
           -webkit-print-color-adjust: exact;
         }
         .page-container {
@@ -151,7 +175,18 @@ export function generateQuotationHTML(quotation: Quotation): string {
           position: relative;
           page-break-after: always;
           background: #ffffff;
-          margin: 0 auto;
+          margin: 0 auto 24px auto;
+          box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+        }
+        @media print {
+          body {
+            background-color: #ffffff;
+            padding: 0;
+          }
+          .page-container {
+            margin: 0 auto;
+            box-shadow: none;
+          }
         }
         .page-frame {
           width: 100%;
@@ -463,18 +498,67 @@ export function generateQuotationHTML(quotation: Quotation): string {
   `;
 }
 
-export async function generateQuotationPDF(quotation: Quotation): Promise<string> {
-  const htmlContent = generateQuotationHTML(quotation);
+// Sample 1: 20kW Grand Hybrid (Mr. Masood style - 12 items including Item 12 Battery in main table)
+const sampleGrand = {
+  id: 'sample_grand',
+  quotationNumber: 'PS-2026-002',
+  customer: { name: 'Mr. Masood sb', address: '187, Falcon Complex, Lahore' },
+  capacityKw: '20',
+  systemType: 'HYBRID',
+  formatKind: 'GRAND_HYBRID',
+  panelWattage: '625W',
+  panelCount: 32,
+  validTill: '05/09/2026',
+  grandTotal: 4255600,
+  paymentTerms: { advancePercent: 70, onDumpingPercent: 20, onCompletionPercent: 10 },
+  lineItems: [
+    { srNo: 1, description: 'JA / Jinko 620/625 Watt N-Type Bifacial Mono Perc Half-Cut Technology Tier 1', qty: '32', rate: null, total: 860000, remarks: '15 Years Production Warranty' },
+    { srNo: 2, description: 'Solis / GoodWe Hybrid Inverter LV 20 kW IP66 (3-Phase)', qty: '01', rate: null, total: 825000, remarks: '5 Years Official Warranty' },
+    { srNo: 3, description: 'L3 Frames', qty: '11', rate: null, total: 114500, remarks: '14 Gauge GI' },
+    { srNo: 4, description: 'Civil Work with Concrete Blocks', qty: '', rate: null, total: 58500, remarks: 'Concrete Footing of 1 cubic ft.' },
+    { srNo: 5, description: 'DC Wire 4mm CopperGat / Newage / GM Cable 1000V XLPO', qty: '280 meters', rate: null, total: 93400, remarks: '' },
+    { srNo: 6, description: 'AC Wire 16mm Single Core CopperGat / Newage / GM Cable 600V', qty: '120 meters', rate: null, total: 124700, remarks: '' },
+    { srNo: 7, description: 'Transportation, Loading / Unloading Charges', qty: '', rate: null, total: 48500, remarks: 'From Office to Site' },
+    { srNo: 8, description: 'Solar Cable Routing, Conduit & Protection Works, PVC Ducts/Trunking, Flexible Conduits, PVC Pipes, Fittings, Installation, Bends, Couplers Sockets, Saddles/Clamps, Nut Bolts, Cable Ties, Washers, Rowl Bolts 3” and Other Required Fixing Accessories', qty: '', rate: null, total: 48000, remarks: 'Proper Routing Segregation, Securing & Mechanical Protection of AC/DC Wires' },
+    { srNo: 9, description: '4x 2-Pole DC Breakers 25/32A 1000V, Voltage Protection Device 2-Pole 63A 600V, MC4 Connectors IP66 1000V', qty: '', rate: null, total: 38500, remarks: 'Original CNC / Tomzn' },
+    { srNo: 10, description: '1x 4-Pole AC Breakers MCB 63A 600V, 2x 4-Pole Change Over 63A, Metal Distribution Box, Cable Ties 10”', qty: '', rate: null, total: 54500, remarks: 'Original CNC / Tomzn' },
+    { srNo: 11, description: 'Survey, Design, Panels Fixation, Installation, Commissioning, Mechanical & Electrical Work', qty: '', rate: null, total: 85000, remarks: '1 Year Free After-sale Services' },
+    { srNo: 12, description: 'YJC 16 kWh Lithium Battery 314Ah 51.2V', qty: '03', rate: null, total: 1905000, remarks: '7 Years Official Warranty' },
+  ],
+};
 
-  if (Platform.OS === 'web') {
-    return '';
-  }
+// Sample 2: 10kW Simple Hybrid (LC Umar Farooq style - 11 items with Item 11 Battery in main table)
+const sampleSimple = {
+  id: 'sample_simple',
+  quotationNumber: 'PS-2026-001',
+  customer: { name: 'Mr. LC Umar Farooq sb' },
+  capacityKw: '10',
+  systemType: 'HYBRID',
+  formatKind: 'SIMPLE_HYBRID',
+  panelWattage: '625W',
+  panelCount: 18,
+  validTill: '14/08/2026',
+  grandTotal: 1307875,
+  paymentTerms: { advancePercent: 70, onDumpingPercent: 20, onCompletionPercent: 10 },
+  lineItems: [
+    { srNo: 1, description: 'JA 620/625 Watt N-Type Bifacial Mono Perc Half-Cut Technology Tier 1', qty: '18', rate: null, total: 466875, remarks: '15 Years Official Warranty' },
+    { srNo: 2, description: 'Solis / GoodWe Hybrid Inverter 10 kW IP66', qty: '01', rate: null, total: 405000, remarks: '5 Years Official Warranty' },
+    { srNo: 3, description: 'L2 Frames', qty: '09', rate: null, total: 40500, remarks: '14 Gauge Galvanized Iron' },
+    { srNo: 4, description: 'Civil Work with Concrete Blocks', qty: '', rate: null, total: 16500, remarks: 'Concrete Footing of 1 cubic ft.' },
+    { srNo: 5, description: 'DC Wire 4mm CopperGat / Newage Cable 1000V XLPO', qty: '140 meters', rate: null, total: 36400, remarks: '' },
+    { srNo: 6, description: 'AC Wire 6mm Single Core Copper Cable', qty: '60 meters', rate: null, total: 23100, remarks: '' },
+    { srNo: 7, description: 'Electrical & Mechanical Work, Panel Fixation, Labor Charges', qty: '', rate: null, total: 31500, remarks: '1 Year Free After-sale Services' },
+    { srNo: 8, description: 'Transportation, Loading / Unloading Charges', qty: '', rate: null, total: 7500, remarks: 'From Office to Site' },
+    { srNo: 9, description: 'PVC Ducting, Flexible Pipes, Conduits, PVC Pipes, Fittings, Installation, Bands, Sockets, Nut Bolts, Cable Ties, Washers, Rowl Bolts', qty: '', rate: null, total: 23700, remarks: 'GM / Turkplast' },
+    { srNo: 10, description: 'Survey, Design, MC4 Connectors, AC/DC Breakers (CNC, Tomzn), Distribution Box, Voltage Protection Device, Change-Over 63A', qty: '', rate: null, total: 26800, remarks: '' },
+    { srNo: 11, description: 'YJC 5 kWh Lithium Battery 100Ah 51.2V', qty: '01', rate: null, total: 230000, remarks: '5 Years Official Warranty' },
+  ],
+};
 
-  const { uri } = await Print.printToFileAsync({
-    html: htmlContent,
-    width: 595,
-    height: 842,
-  });
+const grandHtml = generateHTML(sampleGrand);
+const simpleHtml = generateHTML(sampleSimple);
 
-  return uri;
-}
+fs.writeFileSync(path.join(__dirname, 'sample_20kW_grand_hybrid.html'), grandHtml, 'utf8');
+fs.writeFileSync(path.join(__dirname, 'sample_10kW_simple_hybrid.html'), simpleHtml, 'utf8');
+
+console.log('Successfully re-rendered sample_20kW_grand_hybrid.html and sample_10kW_simple_hybrid.html with unified table and larger text.');

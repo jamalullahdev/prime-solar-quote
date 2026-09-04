@@ -9,46 +9,69 @@ export const DEFAULT_COLUMNS: TemplateColumn[] = [
   { key: 'remarks', label: 'Remarks', type: 'TEXT', order: 6 },
 ];
 
-export const SIMPLE_HYBRID_DEFAULT_BATTERIES: BatteryOption[] = [
+export const PRESET_BATTERY_ITEMS = [
   {
-    id: 'bat-5kwh',
     brand: 'YJC',
     capacityKwh: 5,
-    voltage: '51.2V',
-    ampHours: '100Ah',
+    specs: '100Ah 51.2V',
+    description: 'YJC 5 kWh Lithium Battery 100Ah 51.2V',
+    qty: '01',
     rate: 230000,
-    warranty: '5 Years Official Warranty',
+    total: 230000,
+    remarks: '5 Years Official Warranty',
   },
   {
-    id: 'bat-10kwh',
     brand: 'YJC',
     capacityKwh: 10,
-    voltage: '51.2V',
-    ampHours: '200Ah',
+    specs: '200Ah 51.2V',
+    description: 'YJC 10 kWh Lithium Battery 200Ah 51.2V',
+    qty: '01',
     rate: 420000,
-    warranty: '5 Years Official Warranty',
+    total: 420000,
+    remarks: '5 Years Official Warranty',
   },
   {
-    id: 'bat-16kwh',
     brand: 'YJC',
     capacityKwh: 16,
-    voltage: '51.2V',
-    ampHours: '314Ah',
+    specs: '314Ah 51.2V',
+    description: 'YJC 16 kWh Lithium Battery 314Ah 51.2V',
+    qty: '01',
     rate: 610000,
-    warranty: '5 Years Official Warranty',
+    total: 610000,
+    remarks: '5 Years Official Warranty',
+  },
+  {
+    brand: 'Dyness',
+    capacityKwh: 5,
+    specs: '100Ah 51.2V',
+    description: 'Dyness 5 kWh Lithium Battery 100Ah 51.2V',
+    qty: '01',
+    rate: 250000,
+    total: 250000,
+    remarks: '5 Years Official Warranty',
+  },
+  {
+    brand: 'Dyness',
+    capacityKwh: 16,
+    specs: '314Ah 51.2V',
+    description: 'Dyness 16 kWh Lithium Battery 314Ah 51.2V',
+    qty: '01',
+    rate: 665000,
+    total: 665000,
+    remarks: '5 Years Official Warranty',
   },
 ];
 
 export const SEED_TEMPLATES: TemplateDefinition[] = [
-  // 1. Simple Hybrid Format (LC Umar Farooq 10kW Style)
+  // 1. Simple Hybrid Format (10kW - Battery listed directly in main table)
   {
     id: 'template-simple-hybrid',
     name: 'Simple Hybrid System',
-    description: '10kW-15kW Standard Hybrid setup with 1-page table, Page 1 yellow highlighted battery total, and Page 2 3-option battery reference table.',
+    description: '10kW Hybrid solar setup with Tier-1 bifacial panels, inverter, and Lithium battery listed directly in the main itemized table.',
     formatKind: 'SIMPLE_HYBRID',
     systemTypeDefault: 'HYBRID',
     columns: DEFAULT_COLUMNS,
-    hasBatterySection: true,
+    hasBatterySection: false, // All batteries are directly inside the main line items table
     hasPaymentTermsSection: true,
     hasRoiSection: true,
     isBuiltIn: true,
@@ -144,10 +167,19 @@ export const SEED_TEMPLATES: TemplateDefinition[] = [
         total: 26800,
         remarks: '',
       },
+      {
+        id: 'sh-11',
+        srNo: 11,
+        description: 'YJC 5 kWh Lithium Battery 100Ah 51.2V',
+        qty: '01',
+        rate: null,
+        total: 230000,
+        remarks: '5 Years Official Warranty',
+      },
     ],
   },
 
-  // 2. Grand Hybrid Format (Mr. Masood 20kW Style)
+  // 2. Grand Hybrid Format (20kW+ Detailed multi-page Hybrid with battery in main table)
   {
     id: 'template-grand-hybrid',
     name: 'Grand Hybrid System',
@@ -155,7 +187,7 @@ export const SEED_TEMPLATES: TemplateDefinition[] = [
     formatKind: 'GRAND_HYBRID',
     systemTypeDefault: 'HYBRID',
     columns: DEFAULT_COLUMNS,
-    hasBatterySection: false, // In grand hybrid, battery is in the main line items table
+    hasBatterySection: false, // Battery is directly inside the main line items table
     hasPaymentTermsSection: true,
     hasRoiSection: true,
     isBuiltIn: true,
@@ -272,7 +304,7 @@ export const SEED_TEMPLATES: TemplateDefinition[] = [
     ],
   },
 
-  // 3. On-Grid System Format (Mr. Nadeem 10kW Style)
+  // 3. On-Grid System Format (Net-Metering without battery)
   {
     id: 'template-on-grid',
     name: 'On-Grid Solar System',

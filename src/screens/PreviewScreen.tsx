@@ -40,13 +40,13 @@ export default function PreviewScreen({ route, navigation }: any) {
       if (!quotation) return;
       setGenerating(true);
       try {
-        const html = generateQuotationHTML(quotation, selectedBattery);
+        const html = generateQuotationHTML(quotation);
         if (isMounted) {
           setHtmlContent(html);
         }
 
         if (Platform.OS !== 'web') {
-          const uri = await generateQuotationPDF(quotation, selectedBattery);
+          const uri = await generateQuotationPDF(quotation);
           if (isMounted) {
             setPdfUri(uri);
           }
@@ -84,7 +84,7 @@ export default function PreviewScreen({ route, navigation }: any) {
     }
 
     if (!pdfUri) {
-      const uri = await generateQuotationPDF(quotation, selectedBattery);
+      const uri = await generateQuotationPDF(quotation);
       setPdfUri(uri);
       await saveQuotation(quotation);
       await shareQuotationWhatsApp(uri, quotation);
