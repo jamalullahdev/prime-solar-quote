@@ -24,11 +24,18 @@ import {
   PaymentTerms,
   ProductionData,
 } from '../types';
-import { PRESET_BATTERY_ITEMS } from '../data/seedTemplates';
 import {
   formatCurrency,
   calculateProductionData,
 } from '../utils/solarCalculations';
+import {
+  getStandardBatterySpecs,
+  formatBatteryDescription,
+  isBatteryDescription,
+  parseBatteryDescription,
+  POPULAR_BATTERY_BRANDS,
+  STANDARD_BATTERY_SIZES,
+} from '../utils/batteryHelper';
 
 export default function QuotationEditorScreen({ route, navigation }: any) {
   const quotationId = route?.params?.quotationId;
@@ -72,8 +79,18 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
       : []
   );
 
-  // Battery Preset Picker Modal State
-  const [showBatteryPicker, setShowBatteryPicker] = useState(false);
+  // Battery Configurator Modal State
+  const [showBatteryModal, setShowBatteryModal] = useState(false);
+  const [editingBatteryIndex, setEditingBatteryIndex] = useState<number | null>(null);
+  const [batteryBrand, setBatteryBrand] = useState('YJC');
+  const [batteryKwh, setBatteryKwh] = useState('5');
+  const [batteryAh, setBatteryAh] = useState('100Ah');
+  const [batteryVoltage, setBatteryVoltage] = useState('51.2V');
+  const [batteryQty, setBatteryQty] = useState('01');
+  const [batteryRate, setBatteryRate] = useState('230000');
+  const [batteryTotal, setBatteryTotal] = useState('230000');
+  const [batteryRemarks, setBatteryRemarks] = useState('5 Years Official Warranty');
+  const [isCustomKwh, setIsCustomKwh] = useState(false);
 
   // Payment terms
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerms>(
@@ -126,20 +143,122 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
     setLineItems([...lineItems, newItem]);
   };
 
-  const handleAddPresetBattery = (preset: typeof PRESET_BATTERY_ITEMS[0]) => {
-    const nextSr = lineItems.length + 1;
-    const newBatteryItem: LineItem = {
-      id: `li_bat_${Date.now()}_${nextSr}`,
-      srNo: nextSr,
-      description: preset.description,
-      qty: preset.qty,
-      rate: preset.rate,
-      total: preset.total,
-      remarks: preset.remarks,
-      isEditableDescription: true,
-    };
-    setLineItems([...lineItems, newBatteryItem]);
-    setShowBatteryPicker(false);
+  const handleOpenAddBattery = () => {
+    setEditingBatteryIndex(null);
+    setBatteryBrand('YJC');
+    setBatteryKwh('5');
+    setIsCustomKwh(false);
+    const specs = getStandardBatterySpecs(5);
+    setBatteryAh(specs.ah);
+    setBatteryVoltage(specs.voltage);
+    setBatteryRemarks(specs.defaultWarranty);
+    setBatteryQty('01');
+    setBatteryRate(specs.defaultRate.toString());
+    setBatteryTotal(specs.defaultRate.toString());
+    setShowBatteryModal(true);
+  };
+
+  const handleOpenEditBattery = (index: number) => {
+    const item = lineItems[index];
+    if (!item) return;
+    setEditingBatteryIndex(index);
+    const parsed = parseBatteryDescription(item.description);
+    setBatteryBrand(parsed.brand || 'YJC');
+    setBatteryKwh(parsed.capacityKwh.toString());
+    setBatteryAh(parsed.ah || '100Ah');
+    setBatteryVoltage(parsed.voltage || '51.2V');
+    setIsCustomKwh(!STANDARD_BATTERY_SIZES.includes(parsed.capacityKwh));
+    setBatteryQty(item.qty || '01');
+    const numQty = parseFloat(item.qty) || 1;
+    const numTotal = item.total || 0;
+    const derivedRate =
+      item.rate || (numTotal > 0 && numQty > 0 ? Math.round(numTotal / numQty) : 0);
+    setBatteryRate(derivedRate.toString());
+    setBatteryTotal(numTotal.toString());
+    setBatteryRemarks(item.remarks || '5 Years Official Warranty');
+    setShowBatteryModal(true);
+  };
+
+  const handleSelectKwhSize = (kwh: number) => {
+    setIsCustomKwh(false);
+    setBatteryKwh(kwh.toString());
+    const specs = getStandardBatterySpecs(kwh);
+    setBatteryAh(specs.ah);
+    setBatteryVoltage(specs.voltage);
+    setBatteryRemarks(specs.defaultWarranty);
+    setBatteryRate(specs.defaultRate.toString());
+    const numQty = parseFloat(batteryQty) || 1;
+    setBatteryTotal((specs.defaultRate * numQty).toString());
+  };
+
+  const handleCustomKwhChange = (text: string) => {
+    setBatteryKwh(text);
+    const num = parseFloat(text);
+    if (!isNaN(num) && num > 0) {
+      const specs = getStandardBatterySpecs(num);
+      setBatteryAh(specs.ah);
+      setBatteryVoltage(specs.voltage);
+      const numQty = parseFloat(batteryQty) || 1;
+      setBatteryRate(specs.defaultRate.toString());
+      setBatteryTotal((specs.defaultRate * numQty).toString());
+    }
+  };
+
+  const handleRateChange = (text: string) => {
+    setBatteryRate(text);
+    const numRate = parseFloat(text) || 0;
+    const numQty = parseFloat(batteryQty) || 1;
+    setBatteryTotal(Math.round(numRate * numQty).toString());
+  };
+
+  const handleQtyChange = (text: string) => {
+    setBatteryQty(text);
+    const numQty = parseFloat(text) || 1;
+    const numRate = parseFloat(batteryRate) || 0;
+    setBatteryTotal(Math.round(numRate * numQty).toString());
+  };
+
+  const handleSaveBatteryConfig = () => {
+    const formattedDesc = formatBatteryDescription(
+      batteryBrand,
+      batteryKwh,
+      batteryAh,
+      batteryVoltage
+    );
+    const numQty = batteryQty.trim() || '01';
+    const numRate = parseFloat(batteryRate) || null;
+    const numTotal =
+      parseFloat(batteryTotal) ||
+      (numRate ? Math.round(numRate * (parseFloat(numQty) || 1)) : 0);
+    const finalRemarks = batteryRemarks.trim();
+
+    if (editingBatteryIndex !== null) {
+      const updated = [...lineItems];
+      updated[editingBatteryIndex] = {
+        ...updated[editingBatteryIndex],
+        description: formattedDesc,
+        qty: numQty,
+        rate: numRate,
+        total: numTotal,
+        remarks: finalRemarks,
+      };
+      setLineItems(updated);
+    } else {
+      const nextSr = lineItems.length + 1;
+      const newBatteryItem: LineItem = {
+        id: `li_bat_${Date.now()}_${nextSr}`,
+        srNo: nextSr,
+        description: formattedDesc,
+        qty: numQty,
+        rate: numRate,
+        total: numTotal,
+        remarks: finalRemarks,
+        isEditableDescription: true,
+      };
+      setLineItems([...lineItems, newBatteryItem]);
+    }
+
+    setShowBatteryModal(false);
   };
 
   const handleDeleteRow = (index: number) => {
@@ -239,6 +358,14 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
     navigation.navigate('Preview', { quotation: quote });
   };
 
+  // Real-time preview of battery description in modal
+  const modalLiveDescription = formatBatteryDescription(
+    batteryBrand,
+    batteryKwh,
+    batteryAh,
+    batteryVoltage
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <Header
@@ -321,7 +448,7 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
             <View style={{ flexDirection: 'row', gap: 6 }}>
               <TouchableOpacity
                 style={[styles.addRowBtn, { backgroundColor: colors.secondaryContainer }]}
-                onPress={() => setShowBatteryPicker(true)}
+                onPress={handleOpenAddBattery}
                 activeOpacity={0.8}
               >
                 <Ionicons name="battery-charging" size={15} color="#FFFFFF" style={{ marginRight: 3 }} />
@@ -337,30 +464,52 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
 
           <View style={{ gap: 10 }}>
             {lineItems.map((item, index) => {
-              const isBatteryItem =
-                item.description.toLowerCase().includes('battery') ||
-                item.description.toLowerCase().includes('lithium');
+              const isBattery = isBatteryDescription(item.description);
 
               return (
                 <View
                   key={item.id || index}
                   style={[
                     styles.lineItemRowCard,
-                    isBatteryItem && { backgroundColor: '#FFFDF5', borderColor: '#FDE68A' },
+                    isBattery && styles.batteryRowCard,
                   ]}
                 >
+                  {/* Row Header */}
                   <View style={styles.lineItemRowHeader}>
-                    <View style={[styles.srBadge, isBatteryItem && { backgroundColor: colors.secondaryContainer }]}>
+                    <View style={[styles.srBadge, isBattery && { backgroundColor: colors.secondaryContainer }]}>
                       <Text style={styles.srBadgeText}>
                         {item.srNo < 10 ? '0' + item.srNo : item.srNo}
                       </Text>
                     </View>
+
+                    {isBattery && (
+                      <View style={styles.batteryBadge}>
+                        <Ionicons name="flash" size={12} color="#D97706" style={{ marginRight: 2 }} />
+                        <Text style={styles.batteryBadgeText}>BATTERY</Text>
+                      </View>
+                    )}
+
                     <TextInput
-                      style={[styles.descInput, { flex: 1, marginLeft: 8 }, isBatteryItem && { fontWeight: '700' }]}
+                      style={[
+                        styles.descInput,
+                        { flex: 1, marginLeft: 6 },
+                        isBattery && { fontWeight: '700', color: '#1E293B' },
+                      ]}
                       value={item.description}
                       onChangeText={(v) => handleUpdateRow(index, 'description', v)}
                       placeholder="Item Description..."
                     />
+
+                    {isBattery && (
+                      <TouchableOpacity
+                        style={styles.editBatteryIconBtn}
+                        onPress={() => handleOpenEditBattery(index)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="options-outline" size={18} color={colors.secondaryContainer} />
+                      </TouchableOpacity>
+                    )}
+
                     <TouchableOpacity
                       style={styles.deleteRowBtn}
                       onPress={() => handleDeleteRow(index)}
@@ -370,6 +519,7 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
                     </TouchableOpacity>
                   </View>
 
+                  {/* Row Inputs */}
                   <View style={styles.lineItemInputsRow}>
                     <View style={{ width: '26%' }}>
                       <Text style={styles.microLabel}>Qty</Text>
@@ -531,35 +681,228 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
         </NeumorphicCard>
       </ScrollView>
 
-      {/* Preset Battery Quick Selector Modal */}
-      <Modal visible={showBatteryPicker} transparent animationType="fade">
+      {/* Advanced Battery Configurator Modal */}
+      <Modal visible={showBatteryModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+            {/* Modal Header */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Lithium Battery to Add</Text>
-              <TouchableOpacity onPress={() => setShowBatteryPicker(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close" size={24} color={colors.outline} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={styles.modalIconBox}>
+                  <Ionicons name="battery-charging" size={20} color="#FFFFFF" />
+                </View>
+                <View>
+                  <Text style={styles.modalTitle}>
+                    {editingBatteryIndex !== null ? 'Edit Battery Item' : 'Add Lithium Battery'}
+                  </Text>
+                  <Text style={styles.modalSub}>
+                    Auto-formats specs according to standard client rules
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowBatteryModal(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close-circle" size={26} color={colors.outline} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.modalSub}>
-              Tap any battery model below to insert it directly into your itemized quotation table:
-            </Text>
 
-            <View style={{ gap: 8, marginTop: 10 }}>
-              {PRESET_BATTERY_ITEMS.map((preset, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  style={styles.presetBatteryCard}
-                  onPress={() => handleAddPresetBattery(preset)}
-                  activeOpacity={0.7}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.presetName}>{preset.description}</Text>
-                    <Text style={styles.presetWarranty}>{preset.remarks}</Text>
+            <ScrollView style={{ maxHeight: 480 }} showsVerticalScrollIndicator={false}>
+              {/* Step 1: Battery Capacity (kWh) */}
+              <View style={styles.configSection}>
+                <Text style={styles.configLabel}>1. SELECT CAPACITY (kWh)</Text>
+                <View style={styles.chipRow}>
+                  {STANDARD_BATTERY_SIZES.map((kwh) => {
+                    const isSelected = !isCustomKwh && batteryKwh === kwh.toString();
+                    const std = getStandardBatterySpecs(kwh);
+                    return (
+                      <TouchableOpacity
+                        key={kwh}
+                        style={[styles.kwhChip, isSelected && styles.kwhChipActive]}
+                        onPress={() => handleSelectKwhSize(kwh)}
+                      >
+                        <Text style={[styles.kwhChipText, isSelected && styles.kwhChipTextActive]}>
+                          {kwh} kWh
+                        </Text>
+                        <Text style={[styles.kwhChipSub, isSelected && styles.kwhChipSubActive]}>
+                          {std.ah}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  <TouchableOpacity
+                    style={[styles.kwhChip, isCustomKwh && styles.kwhChipActive]}
+                    onPress={() => setIsCustomKwh(true)}
+                  >
+                    <Text style={[styles.kwhChipText, isCustomKwh && styles.kwhChipTextActive]}>
+                      Custom
+                    </Text>
+                    <Text style={[styles.kwhChipSub, isCustomKwh && styles.kwhChipSubActive]}>
+                      kWh / Ah
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Custom Sizing Inputs (Shown only if Custom selected) */}
+                {isCustomKwh && (
+                  <View style={styles.customRow}>
+                    <View style={{ flex: 1, marginRight: 6 }}>
+                      <Text style={styles.microLabel}>Custom kWh</Text>
+                      <TextInput
+                        style={styles.configInput}
+                        keyboardType="numeric"
+                        value={batteryKwh}
+                        onChangeText={handleCustomKwhChange}
+                        placeholder="e.g. 15 or 32"
+                      />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 6 }}>
+                      <Text style={styles.microLabel}>Ah Rating</Text>
+                      <TextInput
+                        style={styles.configInput}
+                        value={batteryAh}
+                        onChangeText={setBatteryAh}
+                        placeholder="e.g. 300Ah"
+                      />
+                    </View>
                   </View>
-                  <Text style={styles.presetRate}>+ Rs. {formatCurrency(preset.total)}</Text>
-                </TouchableOpacity>
-              ))}
+                )}
+              </View>
+
+              {/* Step 2: Battery Brand / Company */}
+              <View style={styles.configSection}>
+                <Text style={styles.configLabel}>2. BRAND / COMPANY NAME</Text>
+                <View style={styles.chipRow}>
+                  {POPULAR_BATTERY_BRANDS.slice(0, 5).map((brand) => {
+                    const isSelected = batteryBrand.toLowerCase() === brand.toLowerCase();
+                    return (
+                      <TouchableOpacity
+                        key={brand}
+                        style={[styles.brandChip, isSelected && styles.brandChipActive]}
+                        onPress={() => setBatteryBrand(brand)}
+                      >
+                        <Text
+                          style={[
+                            styles.brandChipText,
+                            isSelected && styles.brandChipTextActive,
+                          ]}
+                        >
+                          {brand}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <TextInput
+                  style={[styles.configInput, { marginTop: 8 }]}
+                  value={batteryBrand}
+                  onChangeText={setBatteryBrand}
+                  placeholder="Or type custom brand name (e.g. YJC, Dyness, Narada)..."
+                />
+              </View>
+
+              {/* Step 3: Quantity & Pricing */}
+              <View style={styles.configSection}>
+                <Text style={styles.configLabel}>3. QUANTITY & RATE (Rs.)</Text>
+                <View style={styles.customRow}>
+                  <View style={{ width: '30%', marginRight: 8 }}>
+                    <Text style={styles.microLabel}>Qty</Text>
+                    <TextInput
+                      style={styles.configInput}
+                      value={batteryQty}
+                      onChangeText={handleQtyChange}
+                      placeholder="01"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.microLabel}>Unit Rate (Rs.)</Text>
+                    <TextInput
+                      style={styles.configInput}
+                      keyboardType="numeric"
+                      value={batteryRate}
+                      onChangeText={handleRateChange}
+                      placeholder="e.g. 230000"
+                    />
+                  </View>
+                </View>
+                <View style={styles.totalPreviewBox}>
+                  <Text style={styles.totalPreviewLabel}>Calculated Battery Total:</Text>
+                  <Text style={styles.totalPreviewVal}>
+                    Rs. {formatCurrency(parseFloat(batteryTotal) || 0)}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Step 4: Warranty / Remarks */}
+              <View style={styles.configSection}>
+                <Text style={styles.configLabel}>4. WARRANTY / REMARKS</Text>
+                <View style={styles.chipRow}>
+                  {['5 Years Official Warranty', '7 Years Official Warranty', '10 Years Official Warranty'].map(
+                    (w) => {
+                      const isSelected = batteryRemarks === w;
+                      return (
+                        <TouchableOpacity
+                          key={w}
+                          style={[styles.warrantyChip, isSelected && styles.warrantyChipActive]}
+                          onPress={() => setBatteryRemarks(w)}
+                        >
+                          <Text
+                            style={[
+                              styles.warrantyChipText,
+                              isSelected && styles.warrantyChipTextActive,
+                            ]}
+                          >
+                            {w.replace(' Official Warranty', ' Yrs')}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    }
+                  )}
+                </View>
+                <TextInput
+                  style={[styles.configInput, { marginTop: 8 }]}
+                  value={batteryRemarks}
+                  onChangeText={setBatteryRemarks}
+                  placeholder="Remarks / Warranty..."
+                />
+              </View>
+
+              {/* Real-time Line Item Preview Box */}
+              <View style={styles.livePreviewCard}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                  <Ionicons name="checkmark-circle" size={16} color="#059669" style={{ marginRight: 4 }} />
+                  <Text style={styles.livePreviewTitle}>QUOTATION TABLE PREVIEW</Text>
+                </View>
+                <Text style={styles.livePreviewDesc}>{modalLiveDescription}</Text>
+                <View style={styles.livePreviewDetails}>
+                  <Text style={styles.livePreviewDetailItem}>Qty: {batteryQty || '01'}</Text>
+                  <Text style={styles.livePreviewDetailItem}>
+                    Total: Rs. {formatCurrency(parseFloat(batteryTotal) || 0)}
+                  </Text>
+                  <Text style={styles.livePreviewDetailItem}>Remarks: {batteryRemarks}</Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            {/* Modal Bottom Buttons */}
+            <View style={styles.modalBottomRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowBatteryModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalSubmitBtn}
+                onPress={handleSaveBatteryConfig}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="checkmark" size={18} color="#FFFFFF" style={{ marginRight: 4 }} />
+                <Text style={styles.modalSubmitText}>
+                  {editingBatteryIndex !== null ? 'Update Battery' : 'Add to Table'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -668,6 +1011,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
+  batteryRowCard: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FCD34D',
+    borderWidth: 1.5,
+  },
   lineItemRowHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -684,6 +1032,22 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 11,
   },
+  batteryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginLeft: 6,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  batteryBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#B45309',
+  },
   descInput: {
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
@@ -695,9 +1059,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#CBD5E1',
   },
+  editBatteryIconBtn: {
+    padding: 6,
+    marginLeft: 4,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+  },
   deleteRowBtn: {
     padding: 6,
-    marginLeft: 6,
+    marginLeft: 4,
   },
   lineItemInputsRow: {
     flexDirection: 'row',
@@ -817,28 +1187,39 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 20,
-    maxWidth: 480,
+    maxWidth: 520,
     width: '100%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    elevation: 10,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  modalIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: colors.secondaryContainer,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalTitle: {
     fontSize: 16,
@@ -846,34 +1227,196 @@ const styles = StyleSheet.create({
     color: colors.primaryContainer,
   },
   modalSub: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.outline,
-    lineHeight: 16,
   },
-  presetBatteryCard: {
+  configSection: {
+    marginBottom: 14,
+  },
+  configLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.onSurfaceVariant,
+    letterSpacing: 0.6,
+    marginBottom: 8,
+  },
+  chipRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  kwhChip: {
+    flex: 1,
+    minWidth: 72,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E2E8F0',
   },
-  presetName: {
+  kwhChipActive: {
+    backgroundColor: '#FEF3C7',
+    borderColor: colors.secondaryContainer,
+  },
+  kwhChipText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.onSurface,
   },
-  presetWarranty: {
-    fontSize: 11,
+  kwhChipTextActive: {
+    color: '#92400E',
+  },
+  kwhChipSub: {
+    fontSize: 10,
+    fontWeight: '600',
     color: colors.outline,
     marginTop: 2,
   },
-  presetRate: {
+  kwhChipSubActive: {
+    color: '#B45309',
+  },
+  customRow: {
+    flexDirection: 'row',
+    marginTop: 8,
+  },
+  configInput: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 40,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.onSurface,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  brandChip: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  brandChipActive: {
+    backgroundColor: colors.primaryContainer,
+    borderColor: colors.primaryContainer,
+  },
+  brandChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.onSurface,
+  },
+  brandChipTextActive: {
+    color: '#FFFFFF',
+  },
+  totalPreviewBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 8,
+  },
+  totalPreviewLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.onSurfaceVariant,
+  },
+  totalPreviewVal: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: colors.secondaryContainer,
+  },
+  warrantyChip: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  warrantyChipActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#10B981',
+  },
+  warrantyChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.onSurface,
+  },
+  warrantyChipTextActive: {
+    color: '#047857',
+  },
+  livePreviewCard: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: '#FCD34D',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  livePreviewTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#92400E',
+    letterSpacing: 0.5,
+  },
+  livePreviewDesc: {
     fontSize: 13,
     fontWeight: '800',
-    color: colors.secondaryContainer,
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  livePreviewDetails: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  livePreviewDetailItem: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#78350F',
+  },
+  modalBottomRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  modalCancelBtn: {
+    flex: 1,
+    height: 44,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.onSurfaceVariant,
+  },
+  modalSubmitBtn: {
+    flex: 1.5,
+    height: 44,
+    backgroundColor: colors.secondaryContainer,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSubmitText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   bottomBar: {
     position: 'absolute',
