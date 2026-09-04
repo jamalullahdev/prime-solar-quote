@@ -38,31 +38,31 @@ export function generateQuotationHTML(quotation: Quotation): string {
 
   const capacityKwUpper = (quotation.capacityKw || '10').toUpperCase().replace('KW', '');
 
-  // Helper to render table row with large readable typography
+  // Helper to render table row with clean, large, natural typography matching original PDF
   const renderRow = (item: any, idx: number) => `
     <tr>
-      <td style="text-align: center; padding: 7.5px 5px; border: 1.5px solid #000; font-size: 12px; font-weight: 700;">${
+      <td style="text-align: center; padding: 8px 5px; border: 1px solid #000000; font-size: 14px; font-weight: 500;">${
         item.srNo < 10 ? '0' + item.srNo : item.srNo || idx + 1
       }</td>
-      <td style="text-align: left; padding: 7.5px 8px; border: 1.5px solid #000; font-size: 12px; font-weight: 600; line-height: 1.35;">${
+      <td style="text-align: left; padding: 8px 10px; border: 1px solid #000000; font-size: 14px; font-weight: 400; line-height: 1.4; color: #000000;">${
         item.description || ''
       }</td>
-      <td style="text-align: center; padding: 7.5px 5px; border: 1.5px solid #000; font-size: 12px; font-weight: 600;">${
+      <td style="text-align: center; padding: 8px 5px; border: 1px solid #000000; font-size: 14px; font-weight: 500;">${
         item.qty || ''
       }</td>
-      <td style="text-align: center; padding: 7.5px 5px; border: 1.5px solid #000; font-size: 12px; font-weight: 600;">${
+      <td style="text-align: center; padding: 8px 5px; border: 1px solid #000000; font-size: 14px; font-weight: 500;">${
         item.rate ? formatCurrency(item.rate) : ''
       }</td>
-      <td style="text-align: center; padding: 7.5px 6px; border: 1.5px solid #000; font-size: 12.5px; font-weight: 800;">${
+      <td style="text-align: center; padding: 8px 6px; border: 1px solid #000000; font-size: 14px; font-weight: bold; color: #000000;">${
         item.total ? formatCurrency(item.total) : ''
       }</td>
-      <td style="text-align: left; padding: 7.5px 8px; border: 1.5px solid #000; font-size: 11.5px; line-height: 1.3;">${
+      <td style="text-align: left; padding: 8px 8px; border: 1px solid #000000; font-size: 13.5px; font-weight: 400; line-height: 1.35; color: #000000;">${
         item.remarks || ''
       }</td>
     </tr>
   `;
 
-  // Production Data Table HTML with large legible font
+  // Production Data Table HTML with clean 14px font
   const productionTableHtml = `
     <div class="section-header-p2" style="margin-top: 5mm; margin-bottom: 2.5mm;">
       ${capacityKwUpper}KW SYSTEM PRODUCTION DATA:
@@ -79,7 +79,7 @@ export function generateQuotationHTML(quotation: Quotation): string {
         </tr>
         <tr>
           <td class="prod-cell-label">Monthly Savings</td>
-          <td class="prod-cell-val" style="font-weight: 700; color: #0B2A4A;">${prodData.monthlySavingsText}</td>
+          <td class="prod-cell-val" style="font-weight: bold; color: #0B2A4A;">${prodData.monthlySavingsText}</td>
         </tr>
         <tr>
           <td class="prod-cell-label">Return of Investment (ROI)</td>
@@ -102,11 +102,11 @@ export function generateQuotationHTML(quotation: Quotation): string {
   // Total Row HTML
   const totalRowHtml = `
     <tr class="total-row">
-      <td colspan="4" style="text-align: center; font-size: 13.5px; font-weight: 900; letter-spacing: 0.5px;">Total</td>
-      <td style="text-align: center; font-size: 13.5px; font-weight: 900; color: #0B2A4A;">${formatCurrency(
+      <td colspan="4" style="text-align: center; font-size: 15px; font-weight: bold; letter-spacing: 0.5px;">Total</td>
+      <td style="text-align: center; font-size: 15px; font-weight: bold; color: #0B2A4A;">${formatCurrency(
         quotation.grandTotal
       )}</td>
-      <td style="text-align: center; font-size: 10.5px; line-height: 1.3;">
+      <td style="text-align: center; font-size: 12px; line-height: 1.4;">
         <strong>Valid Till</strong><br/>
         <span>${quotation.validTill || '25/09/2026'}</span>
       </td>
@@ -137,7 +137,7 @@ export function generateQuotationHTML(quotation: Quotation): string {
           box-sizing: border-box;
           margin: 0;
           padding: 0;
-          font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+          font-family: Arial, 'Segoe UI', Calibri, Helvetica, sans-serif;
         }
         body {
           background-color: #ffffff;
@@ -156,7 +156,7 @@ export function generateQuotationHTML(quotation: Quotation): string {
         .page-frame {
           width: 100%;
           min-height: 280mm;
-          border: 1.5px solid #000000;
+          border: 1px solid #000000;
           padding: 6mm 7mm;
           display: flex;
           flex-direction: column;
@@ -179,28 +179,28 @@ export function generateQuotationHTML(quotation: Quotation): string {
           position: relative;
           z-index: 1;
         }
-        /* Top Header Block */
+        /* Top Header Block - Spacious & High Resolution */
         .header-block {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 2mm;
+          margin-bottom: 3mm;
         }
         .logo-container {
           display: flex;
           align-items: center;
         }
         .logo-img {
-          height: 75px;
-          max-width: 220px;
+          height: 80px;
+          max-width: 240px;
           object-fit: contain;
         }
         .company-contacts {
           text-align: right;
-          font-size: 9px;
-          line-height: 1.45;
-          font-weight: 700;
-          color: #1A1A1A;
+          font-size: 12px;
+          line-height: 1.55;
+          font-weight: bold;
+          color: #000000;
         }
         .company-contacts .link {
           color: #1E6FD9;
@@ -226,63 +226,64 @@ export function generateQuotationHTML(quotation: Quotation): string {
         /* Title Block */
         .title-block {
           text-align: center;
-          margin-bottom: 3.5mm;
+          margin-bottom: 4mm;
         }
         .title-main {
-          font-size: 17px;
-          font-weight: 900;
-          letter-spacing: 1.5px;
+          font-size: 19px;
+          font-weight: bold;
+          letter-spacing: 1.8px;
           text-transform: uppercase;
           color: #000000;
-          margin-bottom: 2px;
+          margin-bottom: 3px;
         }
         .title-customer {
-          font-size: 14px;
-          font-weight: 700;
-          color: #1a1a1a;
-          margin-bottom: 2px;
+          font-size: 15px;
+          font-weight: bold;
+          color: #000000;
+          margin-bottom: 3px;
         }
         .title-system {
-          font-size: 14px;
-          font-weight: 700;
+          font-size: 15px;
+          font-weight: bold;
           color: #0B2A4A;
         }
-        /* Quotation Line Items Table */
+        /* Quotation Line Items Table - Clean 14px Typography */
         table.quotation-table {
           width: 100%;
           border-collapse: collapse;
-          margin-bottom: 2.5mm;
+          margin-bottom: 3mm;
         }
         table.quotation-table th {
-          border: 1.5px solid #000000;
-          padding: 7.5px 5px;
-          font-size: 12.5px;
-          font-weight: 900;
+          border: 1px solid #000000;
+          padding: 8px 6px;
+          font-size: 14px;
+          font-weight: bold;
           text-align: center;
           background-color: #ffffff;
+          color: #000000;
         }
         /* Total Row */
         .total-row td {
-          border: 1.5px solid #000000;
-          padding: 8px 6px;
-          font-size: 13.5px;
-          font-weight: 900;
+          border: 1px solid #000000;
+          padding: 8.5px 6px;
+          font-size: 15px;
+          font-weight: bold;
         }
         /* Page 2 Sections */
         .section-header-p2 {
-          font-size: 13.5px;
-          font-weight: 900;
+          font-size: 14.5px;
+          font-weight: bold;
           text-transform: uppercase;
           color: #000000;
-          border-bottom: 1.5px solid #CBD5E1;
+          border-bottom: 1px solid #CBD5E1;
           padding-bottom: 3px;
         }
         .bullet-list {
           list-style-type: disc;
           padding-left: 20px;
-          margin-bottom: 4mm;
-          font-size: 12px;
-          line-height: 1.65;
+          margin-bottom: 4.5mm;
+          font-size: 13px;
+          line-height: 1.7;
         }
         .bullet-list li {
           margin-bottom: 4px;
@@ -297,19 +298,19 @@ export function generateQuotationHTML(quotation: Quotation): string {
           margin-bottom: 4mm;
         }
         table.production-table td {
-          border: 1.5px solid #000000;
-          padding: 8px 10px;
-          font-size: 12.5px;
+          border: 1px solid #000000;
+          padding: 8.5px 12px;
+          font-size: 13.5px;
         }
         .prod-cell-label {
           width: 45%;
-          font-weight: 800;
+          font-weight: bold;
           color: #000000;
         }
         .prod-cell-val {
           width: 55%;
           color: #000000;
-          font-weight: 600;
+          font-weight: 500;
         }
         .footer-spacer {
           margin-top: auto;
