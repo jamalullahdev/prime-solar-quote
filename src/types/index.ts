@@ -21,6 +21,8 @@ export interface LineItem {
   remarks: string;
   isEditableDescription?: boolean;
   locked?: boolean;
+  costRate?: number | null;
+  costTotal?: number | null;
 }
 
 export interface BatteryOption {

@@ -92,6 +92,11 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
   const [batteryRemarks, setBatteryRemarks] = useState('5 Years Official Warranty');
   const [isCustomKwh, setIsCustomKwh] = useState(false);
 
+  // Internal Profit & Cost Safeguard & Modal State
+  const [showProfitPermissionModal, setShowProfitPermissionModal] = useState(false);
+  const [showProfitSheetModal, setShowProfitSheetModal] = useState(false);
+  const [tempCostItems, setTempCostItems] = useState<{ [key: number]: number }>({});
+
   // Payment terms
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerms>(
     existingQuote?.paymentTerms || {
@@ -120,6 +125,12 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
   const subtotal = lineItems.reduce((sum, item) => sum + (item.total || 0), 0);
   const grandTotal = subtotal;
 
+  // Real Cost Total Calculation
+  const totalRealCost = lineItems.reduce((sum, item) => sum + (item.costTotal || 0), 0);
+  const netEstimatedProfit = grandTotal - totalRealCost;
+  const profitMarginPercent =
+    grandTotal > 0 ? Math.round((netEstimatedProfit / grandTotal) * 1000) / 10 : 0;
+
   // Auto-update Production Data when capacity or items change
   useEffect(() => {
     const kw = parseFloat(capacityKw) || 10;
@@ -139,6 +150,7 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
       total: 0,
       remarks: '',
       isEditableDescription: true,
+      costTotal: 0,
     };
     setLineItems([...lineItems, newItem]);
   };
@@ -254,6 +266,7 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
         total: numTotal,
         remarks: finalRemarks,
         isEditableDescription: true,
+        costTotal: numTotal > 0 ? Math.round(numTotal * 0.85) : 0,
       };
       setLineItems([...lineItems, newBatteryItem]);
     }
@@ -279,6 +292,53 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
     updated[index] = item;
     setLineItems(updated);
   };
+
+  // Internal Profit Handlers
+  const handleOpenProfitPermissionModal = () => {
+    setShowProfitPermissionModal(true);
+  };
+
+  const handleUnlockProfitSheet = () => {
+    setShowProfitPermissionModal(false);
+    const initialMap: { [key: number]: number } = {};
+    lineItems.forEach((item, idx) => {
+      initialMap[idx] = item.costTotal || 0;
+    });
+    setTempCostItems(initialMap);
+    setShowProfitSheetModal(true);
+  };
+
+  const handleUpdateTempCost = (index: number, val: number) => {
+    setTempCostItems((prev) => ({ ...prev, [index]: val }));
+  };
+
+  const handleApplyMarginToAll = (marginPercent: number) => {
+    const multiplier = 1 - marginPercent / 100;
+    const updatedMap: { [key: number]: number } = {};
+    lineItems.forEach((item, idx) => {
+      const quoted = item.total || 0;
+      updatedMap[idx] = Math.round(quoted * multiplier);
+    });
+    setTempCostItems(updatedMap);
+  };
+
+  const handleSaveProfitSheet = () => {
+    const updated = lineItems.map((item, idx) => ({
+      ...item,
+      costTotal: tempCostItems[idx] !== undefined ? tempCostItems[idx] : item.costTotal || 0,
+    }));
+    setLineItems(updated);
+    setShowProfitSheetModal(false);
+  };
+
+  // Temp totals inside Profit Modal
+  const modalTempCostTotal = Object.values(tempCostItems).reduce(
+    (sum, c) => sum + (c || 0),
+    0
+  );
+  const modalTempNetProfit = grandTotal - modalTempCostTotal;
+  const modalTempMargin =
+    grandTotal > 0 ? Math.round((modalTempNetProfit / grandTotal) * 1000) / 10 : 0;
 
   const buildQuotationObject = (): Quotation => {
     const kw = parseFloat(capacityKw) || 10;
@@ -358,7 +418,6 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
     navigation.navigate('Preview', { quotation: quote });
   };
 
-  // Real-time preview of battery description in modal
   const modalLiveDescription = formatBatteryDescription(
     batteryBrand,
     batteryKwh,
@@ -441,7 +500,7 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
           </View>
         </NeumorphicCard>
 
-        {/* Itemized Quotation Line Items Grid (Includes Hardware & Batteries) */}
+        {/* Itemized Quotation Line Items Grid */}
         <NeumorphicCard style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <Text style={styles.sectionTitle}>LINE ITEMS ({lineItems.length})</Text>
@@ -571,6 +630,55 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
             <Text style={styles.grandLabel}>Total Quotation</Text>
             <Text style={styles.grandVal}>Rs. {formatCurrency(grandTotal)}</Text>
           </View>
+        </NeumorphicCard>
+
+        {/* 🔒 Internal Cost & Profit Analyzer Card (Permission-Gated) */}
+        <NeumorphicCard style={styles.internalProfitCard}>
+          <View style={styles.internalProfitHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={styles.lockBadge}>
+                <Ionicons name="lock-closed" size={12} color="#DC2626" />
+                <Text style={styles.lockBadgeText}>INTERNAL ONLY</Text>
+              </View>
+              <Text style={styles.internalCardTitle}>Profit & Cost Sheet</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.openProfitBtn}
+              onPress={handleOpenProfitPermissionModal}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="calculator-outline" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+              <Text style={styles.openProfitBtnText}>Calculate Profit</Text>
+            </TouchableOpacity>
+          </View>
+
+          {totalRealCost > 0 ? (
+            <View style={styles.profitSnapshotRow}>
+              <View style={styles.profitSnapshotItem}>
+                <Text style={styles.snapshotLabel}>Real Cost</Text>
+                <Text style={[styles.snapshotVal, { color: '#DC2626' }]}>
+                  Rs. {formatCurrency(totalRealCost)}
+                </Text>
+              </View>
+              <View style={styles.profitSnapshotItem}>
+                <Text style={styles.snapshotLabel}>Net Profit</Text>
+                <Text style={[styles.snapshotVal, { color: '#059669' }]}>
+                  Rs. {formatCurrency(netEstimatedProfit)}
+                </Text>
+              </View>
+              <View style={styles.profitSnapshotItem}>
+                <Text style={styles.snapshotLabel}>Margin</Text>
+                <Text style={[styles.snapshotVal, { color: '#0284C7' }]}>
+                  {profitMarginPercent}%
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.profitHintText}>
+              🔒 Calculate your procurement costs and estimate exact net profit margin without exposing it to customers.
+            </Text>
+          )}
         </NeumorphicCard>
 
         {/* Universal Production Data Table Card */}
@@ -744,7 +852,7 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
                   </TouchableOpacity>
                 </View>
 
-                {/* Custom Sizing Inputs (Shown only if Custom selected) */}
+                {/* Custom Sizing Inputs */}
                 {isCustomKwh && (
                   <View style={styles.customRow}>
                     <View style={{ flex: 1, marginRight: 6 }}>
@@ -902,6 +1010,193 @@ export default function QuotationEditorScreen({ route, navigation }: any) {
                 <Text style={styles.modalSubmitText}>
                   {editingBatteryIndex !== null ? 'Update Battery' : 'Add to Table'}
                 </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🔒 1. Internal Profit Permission Prompt Modal */}
+      <Modal visible={showProfitPermissionModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 440, borderColor: '#F87171', borderWidth: 2 }]}>
+            <View style={{ alignItems: 'center', marginBottom: 12 }}>
+              <View style={styles.permissionIconCircle}>
+                <Ionicons name="shield-checkmark" size={32} color="#DC2626" />
+              </View>
+              <Text style={styles.permissionTitle}>Owner Permission Required</Text>
+              <View style={styles.permissionBadge}>
+                <Text style={styles.permissionBadgeText}>🔒 CONFIDENTIAL INTERNAL REPORT</Text>
+              </View>
+            </View>
+
+            <Text style={styles.permissionBodyText}>
+              You are about to view the real procurement costs and net profit calculation for this project.
+            </Text>
+            <View style={styles.permissionWarningBox}>
+              <Ionicons name="alert-circle" size={18} color="#B45309" style={{ marginRight: 6 }} />
+              <Text style={styles.permissionWarningText}>
+                This data is strictly for Prime Solar internal review and will NEVER be shown to customers.
+              </Text>
+            </View>
+
+            <View style={styles.modalBottomRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowProfitPermissionModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSubmitBtn, { backgroundColor: '#DC2626' }]}
+                onPress={handleUnlockProfitSheet}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="lock-open-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.modalSubmitText}>Unlock Sheet</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🔒 2. Internal Profit & Cost Calculator Sheet Modal */}
+      <Modal visible={showProfitSheetModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 580, maxHeight: '90%' }]}>
+            {/* Sheet Header */}
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={[styles.modalIconBox, { backgroundColor: '#DC2626' }]}>
+                  <Ionicons name="analytics" size={20} color="#FFFFFF" />
+                </View>
+                <View>
+                  <Text style={[styles.modalTitle, { color: '#0F172A' }]}>
+                    Internal Cost & Profit Sheet
+                  </Text>
+                  <Text style={styles.modalSub}>
+                    Enter real purchase costs to calculate exact net margin
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowProfitSheetModal(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close-circle" size={26} color={colors.outline} />
+              </TouchableOpacity>
+            </View>
+
+            {/* KPI Summary Cards */}
+            <View style={styles.profitKpiGrid}>
+              <View style={[styles.profitKpiCard, { borderColor: '#0B2A4A' }]}>
+                <Text style={styles.profitKpiLabel}>Quoted Total</Text>
+                <Text style={[styles.profitKpiVal, { color: '#0B2A4A' }]}>
+                  Rs. {formatCurrency(grandTotal)}
+                </Text>
+              </View>
+              <View style={[styles.profitKpiCard, { borderColor: '#DC2626' }]}>
+                <Text style={styles.profitKpiLabel}>Total Cost</Text>
+                <Text style={[styles.profitKpiVal, { color: '#DC2626' }]}>
+                  Rs. {formatCurrency(modalTempCostTotal)}
+                </Text>
+              </View>
+              <View style={[styles.profitKpiCard, { borderColor: '#059669', backgroundColor: '#F0FDF4' }]}>
+                <Text style={styles.profitKpiLabel}>Net Profit</Text>
+                <Text style={[styles.profitKpiVal, { color: '#059669' }]}>
+                  Rs. {formatCurrency(modalTempNetProfit)}
+                </Text>
+              </View>
+              <View style={[styles.profitKpiCard, { borderColor: '#0284C7', backgroundColor: '#F0F9FF' }]}>
+                <Text style={styles.profitKpiLabel}>Margin</Text>
+                <Text style={[styles.profitKpiVal, { color: '#0284C7' }]}>
+                  {modalTempMargin}%
+                </Text>
+              </View>
+            </View>
+
+            {/* Quick Auto-Estimate Shortcuts */}
+            <View style={styles.shortcutRow}>
+              <Text style={styles.shortcutTitle}>Auto-Set Cost:</Text>
+              <TouchableOpacity
+                style={styles.shortcutChip}
+                onPress={() => handleApplyMarginToAll(15)}
+              >
+                <Text style={styles.shortcutChipText}>15% Profit Margin</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.shortcutChip}
+                onPress={() => handleApplyMarginToAll(20)}
+              >
+                <Text style={styles.shortcutChipText}>20% Profit Margin</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.shortcutChip}
+                onPress={() => handleApplyMarginToAll(0)}
+              >
+                <Text style={styles.shortcutChipText}>Reset to 0</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Line-by-Line Cost Inputs */}
+            <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+              <View style={{ gap: 8 }}>
+                {lineItems.map((item, idx) => {
+                  const quoted = item.total || 0;
+                  const itemCost = tempCostItems[idx] || 0;
+                  const itemProfit = quoted - itemCost;
+
+                  return (
+                    <View key={item.id || idx} style={styles.costItemRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.costItemDesc} numberOfLines={1}>
+                          {item.srNo < 10 ? '0' + item.srNo : item.srNo}. {item.description}
+                        </Text>
+                        <Text style={styles.costItemMeta}>
+                          Quoted: <strong>Rs. {formatCurrency(quoted)}</strong> (Qty: {item.qty || '1'})
+                        </Text>
+                      </View>
+
+                      {/* Cost Input */}
+                      <View style={{ width: 140, marginLeft: 8 }}>
+                        <Text style={styles.microLabel}>Real Cost (Rs.)</Text>
+                        <TextInput
+                          style={[styles.costInput, { color: '#DC2626' }]}
+                          keyboardType="numeric"
+                          value={itemCost ? itemCost.toString() : ''}
+                          onChangeText={(v) => handleUpdateTempCost(idx, parseFloat(v) || 0)}
+                          placeholder="Cost (Rs)"
+                        />
+                        <Text
+                          style={[
+                            styles.costItemProfit,
+                            { color: itemProfit >= 0 ? '#059669' : '#DC2626' },
+                          ]}
+                        >
+                          Profit: Rs. {formatCurrency(itemProfit)}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            {/* Save Buttons */}
+            <View style={styles.modalBottomRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowProfitSheetModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSubmitBtn, { backgroundColor: '#0B2A4A' }]}
+                onPress={handleSaveProfitSheet}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="save-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.modalSubmitText}>Save Internal Costs</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1129,6 +1424,83 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: colors.secondaryContainer,
   },
+  internalProfitCard: {
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: '#FFF1F2',
+    borderWidth: 1.5,
+    borderColor: '#FECDD3',
+  },
+  internalProfitHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  lockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFE4E6',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FDA4AF',
+    gap: 3,
+  },
+  lockBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#DC2626',
+    letterSpacing: 0.5,
+  },
+  internalCardTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#9F1239',
+  },
+  openProfitBtn: {
+    backgroundColor: '#DC2626',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  openProfitBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  profitSnapshotRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+  },
+  profitSnapshotItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  snapshotLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9F1239',
+    marginBottom: 2,
+  },
+  snapshotVal: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  profitHintText: {
+    fontSize: 11,
+    color: '#9F1239',
+    marginTop: 8,
+    lineHeight: 15,
+  },
   accordionCard: {
     borderRadius: 18,
     overflow: 'hidden',
@@ -1187,7 +1559,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
@@ -1382,6 +1754,143 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#78350F',
+  },
+  permissionIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  permissionTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  permissionBadge: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  permissionBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#DC2626',
+    letterSpacing: 0.8,
+  },
+  permissionBodyText: {
+    fontSize: 13,
+    color: '#334155',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  permissionWarningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    marginBottom: 14,
+  },
+  permissionWarningText: {
+    fontSize: 11,
+    color: '#92400E',
+    fontWeight: '600',
+    flex: 1,
+  },
+  profitKpiGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  profitKpiCard: {
+    flex: 1,
+    padding: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+  },
+  profitKpiLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  profitKpiVal: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  shortcutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  shortcutTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  shortcutChip: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  shortcutChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  costItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  costItemDesc: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  costItemMeta: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  costInput: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    height: 32,
+    fontSize: 12,
+    fontWeight: '700',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  costItemProfit: {
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 2,
+    textAlign: 'right',
   },
   modalBottomRow: {
     flexDirection: 'row',
