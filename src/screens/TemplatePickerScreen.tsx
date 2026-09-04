@@ -20,6 +20,7 @@ import { TemplateDefinition } from '../types';
 export default function TemplatePickerScreen({ route, navigation }: any) {
   const templates = usePrimeStore((state) => state.templates);
   const deleteTemplate = usePrimeStore((state) => state.deleteTemplate);
+  const resetTemplatesToDefault = usePrimeStore((state) => state.resetTemplatesToDefault);
 
   const prefillKw = route?.params?.prefillKw || '10';
   const prefillRoi = route?.params?.prefillRoi;
@@ -47,8 +48,42 @@ export default function TemplatePickerScreen({ route, navigation }: any) {
     }
   };
 
+  const handleResetFactoryDefaults = () => {
+    const confirmMsg =
+      'Reset all default formats (Simple Hybrid, Grand Hybrid, On-Grid) back to their original factory configuration? Any custom formats will remain untouched.';
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(confirmMsg)) {
+        resetTemplatesToDefault();
+        window.alert('Default formats restored to factory settings!');
+      }
+    } else {
+      Alert.alert('Reset to Factory Defaults?', confirmMsg, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset Formats',
+          style: 'destructive',
+          onPress: async () => {
+            await resetTemplatesToDefault();
+            Alert.alert('Restored', 'Default formats restored to factory settings!');
+          },
+        },
+      ]);
+    }
+  };
+
   const handleLongPress = (template: TemplateDefinition) => {
     const options: AlertButton[] = [
+      {
+        text: 'Use for Quotation',
+        onPress: () => handleSelectTemplate(template),
+      },
+      {
+        text: 'Edit Format',
+        onPress: () => {
+          navigation.navigate('TemplateBuilder', { editTemplateId: template.id });
+        },
+      },
       {
         text: 'Duplicate Format',
         onPress: () => {
@@ -58,29 +93,21 @@ export default function TemplatePickerScreen({ route, navigation }: any) {
     ];
 
     if (!template.isBuiltIn) {
-      options.push(
-        {
-          text: 'Edit Format',
-          onPress: () => {
-            navigation.navigate('TemplateBuilder', { editTemplateId: template.id });
-          },
+      options.push({
+        text: 'Delete Format',
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert('Confirm Delete', `Delete custom format "${template.name}"?`, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: () => deleteTemplate(template.id) },
+          ]);
         },
-        {
-          text: 'Delete Format',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert('Confirm Delete', `Delete custom format "${template.name}"?`, [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Delete', style: 'destructive', onPress: () => deleteTemplate(template.id) },
-            ]);
-          },
-        }
-      );
+      });
     }
 
     options.push({ text: 'Cancel', style: 'cancel' });
 
-    Alert.alert(template.name, 'Choose action for this quotation format', options);
+    Alert.alert(template.name, 'Manage quotation format', options);
   };
 
   return (
@@ -89,11 +116,21 @@ export default function TemplatePickerScreen({ route, navigation }: any) {
         title="Select Quotation Format"
         showBack
         onBack={() => navigation.goBack()}
+        rightAction={
+          <TouchableOpacity
+            style={styles.resetHeaderBtn}
+            onPress={handleResetFactoryDefaults}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="refresh-outline" size={16} color={colors.primaryContainer} style={{ marginRight: 4 }} />
+            <Text style={styles.resetHeaderText}>Reset</Text>
+          </TouchableOpacity>
+        }
       />
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <Text style={styles.subtitle}>
-          Choose a quotation template. Quotations are template-driven—you can also create and save your own formats!
+          Choose a quotation format to generate a new quote. Tap the pencil icon to edit master default formats with permission.
         </Text>
 
         {/* Pinned: Create New Format Card */}
@@ -108,7 +145,7 @@ export default function TemplatePickerScreen({ route, navigation }: any) {
             <View style={{ flex: 1, marginLeft: 14 }}>
               <Text style={styles.createFormatTitle}>+ Create New Format</Text>
               <Text style={styles.createFormatSub}>
-                Build a customized quotation format with your own columns, sections, and default line items
+                Build a customized quotation format with your own line items, batteries, and payment terms
               </Text>
             </View>
           </NeumorphicCard>
@@ -128,27 +165,33 @@ export default function TemplatePickerScreen({ route, navigation }: any) {
                   <View style={{ flex: 1, paddingRight: 8 }}>
                     <View style={styles.titleBadgeRow}>
                       <Text style={styles.templateTitle}>{tmpl.name}</Text>
-                      {!tmpl.isBuiltIn && (
+                      {tmpl.isBuiltIn ? (
+                        <View style={styles.defaultBadge}>
+                          <Ionicons name="shield-checkmark" size={10} color="#0B2A4A" style={{ marginRight: 2 }} />
+                          <Text style={styles.defaultBadgeText}>DEFAULT</Text>
+                        </View>
+                      ) : (
                         <View style={styles.customBadge}>
-                          <Text style={styles.customBadgeText}>Custom</Text>
+                          <Text style={styles.customBadgeText}>CUSTOM</Text>
                         </View>
                       )}
                     </View>
                     <Text style={styles.templateDesc} numberOfLines={2}>
-                      {tmpl.description || 'Custom quotation template'}
+                      {tmpl.description || 'Quotation format template'}
                     </Text>
                   </View>
 
-                  {!tmpl.isBuiltIn && (
-                    <View style={styles.cardActionGroup}>
-                      <TouchableOpacity
-                        style={styles.cardIconBtn}
-                        onPress={() => navigation.navigate('TemplateBuilder', { editTemplateId: tmpl.id })}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Ionicons name="pencil" size={16} color={colors.primaryContainer} />
-                      </TouchableOpacity>
+                  {/* Edit & Delete Action Buttons */}
+                  <View style={styles.cardActionGroup}>
+                    <TouchableOpacity
+                      style={styles.cardIconBtn}
+                      onPress={() => navigation.navigate('TemplateBuilder', { editTemplateId: tmpl.id })}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="pencil" size={16} color={colors.primaryContainer} />
+                    </TouchableOpacity>
 
+                    {!tmpl.isBuiltIn && (
                       <TouchableOpacity
                         style={[styles.cardIconBtn, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}
                         onPress={() => handleDeleteCustomTemplate(tmpl)}
@@ -156,8 +199,8 @@ export default function TemplatePickerScreen({ route, navigation }: any) {
                       >
                         <Ionicons name="trash-outline" size={16} color={colors.error} />
                       </TouchableOpacity>
-                    </View>
-                  )}
+                    )}
+                  </View>
                 </View>
 
                 <View style={styles.cardFooter}>
@@ -172,9 +215,11 @@ export default function TemplatePickerScreen({ route, navigation }: any) {
                         {tmpl.defaultLineItems?.length || 0} Items
                       </Text>
                     </View>
-                    {tmpl.hasBatterySection && (
-                      <View style={[styles.tag, { backgroundColor: '#FEF3C7' }]}>
-                        <Text style={[styles.tagText, { color: '#92400E' }]}>+ Battery</Text>
+                    {tmpl.formatKind && (
+                      <View style={[styles.tag, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
+                        <Text style={[styles.tagText, { color: '#92400E' }]}>
+                          {tmpl.formatKind.replace('_', ' ')}
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -188,6 +233,16 @@ export default function TemplatePickerScreen({ route, navigation }: any) {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Restore Factory Defaults Link */}
+        <TouchableOpacity
+          style={styles.factoryResetCard}
+          onPress={handleResetFactoryDefaults}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="refresh" size={16} color="#64748B" style={{ marginRight: 6 }} />
+          <Text style={styles.factoryResetText}>Restore Built-in Formats to Factory Defaults</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -204,6 +259,21 @@ const styles = StyleSheet.create({
     maxWidth: 640,
     width: '100%',
     alignSelf: 'center',
+  },
+  resetHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E6E9EE',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  resetHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primaryContainer,
   },
   subtitle: {
     fontSize: 13,
@@ -267,6 +337,21 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.primaryContainer,
   },
+  defaultBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E0E7FF',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  defaultBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0B2A4A',
+  },
   customBadge: {
     backgroundColor: '#DBEAFE',
     paddingHorizontal: 8,
@@ -274,8 +359,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   customBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '800',
     color: '#1D4ED8',
   },
   templateDesc: {
@@ -326,13 +411,26 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cardIconBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 34,
+    height: 34,
+    borderRadius: 9,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#CBD5E1',
+  },
+  factoryResetCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
+    padding: 12,
+  },
+  factoryResetText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+    textDecorationLine: 'underline',
   },
 });

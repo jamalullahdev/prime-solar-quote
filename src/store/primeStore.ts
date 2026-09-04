@@ -26,6 +26,7 @@ interface PrimeState {
   saveTemplate: (template: TemplateDefinition) => Promise<void>;
   deleteTemplate: (id: string) => Promise<void>;
   getTemplate: (id: string) => TemplateDefinition | undefined;
+  resetTemplatesToDefault: () => Promise<void>;
 
   // Settings
   updateCalculatorSettings: (settings: Partial<CalculatorSettings>) => Promise<void>;
@@ -57,8 +58,7 @@ export const usePrimeStore = create<PrimeState>((set, get) => ({
         try {
           const parsed: TemplateDefinition[] = JSON.parse(savedTemplates);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            const customOnes = parsed.filter((t) => !t.isBuiltIn);
-            templates = [...SEED_TEMPLATES, ...customOnes];
+            templates = parsed;
           }
         } catch (e) {}
       }
@@ -132,6 +132,11 @@ export const usePrimeStore = create<PrimeState>((set, get) => ({
 
   getTemplate: (id: string) => {
     return get().templates.find((t) => t.id === id) || get().templates[0];
+  },
+
+  resetTemplatesToDefault: async () => {
+    set({ templates: SEED_TEMPLATES });
+    await AsyncStorage.setItem(STORAGE_KEY_TEMPLATES, JSON.stringify(SEED_TEMPLATES));
   },
 
   updateCalculatorSettings: async (settings: Partial<CalculatorSettings>) => {
