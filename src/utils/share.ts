@@ -1,5 +1,5 @@
 import * as Sharing from 'expo-sharing';
-import { Linking, Alert, Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { Quotation } from '../types';
 import { formatCurrency } from './solarCalculations';
 
@@ -21,13 +21,15 @@ export async function shareQuotationWhatsApp(
 
 Thank you for choosing *Prime Solar Energy (DHA Bahawalpur)*. 
 
-Please find attached your customized *${capacity} kW ${systemType} Solar System Quotation*.
+Please find attached your official *${capacity} kW ${systemType} Solar System Quotation*.
 
 📊 *Quotation Summary:*
-• System Size: *${capacity} kW (${quotation.panelCount || 18} Tier-1 Bifacial Panels)*
+• System Size: *${capacity} kW (${quotation.panelCount || 18}x Tier-1 Bifacial 625W Panels)*
 • Total Investment: *Rs. ${totalStr}*
-• Estimated Monthly Savings: *${quotation.roi?.monthlySavingsPkr || 'Rs. 55,000 - 65,000'}*
-• Estimated Payback: *${quotation.roi?.paybackPeriodMonths || '2.8 Years'}*
+• Daily Production: *${quotation.productionData?.dailyUnitsText || '50 units approx.'}*
+• Monthly Production: *${quotation.productionData?.monthlyUnitsText || '1,500 units approx.'}*
+• Monthly Savings: *${quotation.productionData?.monthlySavingsText || quotation.roi?.monthlySavingsPkr || 'Rs. 95,000 / month'}*
+• Estimated Payback: *${quotation.productionData?.roiMonthsText || quotation.roi?.paybackPeriodMonths || '18 – 20 months'}*
 
 📍 *Prime Solar Energy*
 Office 07, Alpha Avenue, DHA Bahawalpur

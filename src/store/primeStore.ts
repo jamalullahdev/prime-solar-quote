@@ -55,9 +55,10 @@ export const usePrimeStore = create<PrimeState>((set, get) => ({
       let templates = SEED_TEMPLATES;
       if (savedTemplates) {
         try {
-          const parsed = JSON.parse(savedTemplates);
+          const parsed: TemplateDefinition[] = JSON.parse(savedTemplates);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            templates = parsed;
+            const customOnes = parsed.filter((t) => !t.isBuiltIn);
+            templates = [...SEED_TEMPLATES, ...customOnes];
           }
         } catch (e) {}
       }

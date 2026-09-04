@@ -6,6 +6,7 @@ import TwoToneBar from './TwoToneBar';
 
 interface HeaderProps {
   title?: string;
+  subtitle?: string;
   showBack?: boolean;
   onBack?: () => void;
   rightAction?: React.ReactNode;
@@ -13,6 +14,7 @@ interface HeaderProps {
 
 export default function Header({
   title = 'Prime Solar Quotations',
+  subtitle,
   showBack = false,
   onBack,
   rightAction,
@@ -34,9 +36,16 @@ export default function Header({
               />
             </View>
           )}
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title} numberOfLines={1}>
+              {title}
+            </Text>
+            {subtitle ? (
+              <Text style={styles.subtitle} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
         </View>
 
         {rightAction ? <View style={styles.rightGroup}>{rightAction}</View> : null}
@@ -52,7 +61,8 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   container: {
-    height: 60,
+    minHeight: 60,
+    paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -104,10 +114,16 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.8)',
   },
   title: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: colors.primaryContainer,
     letterSpacing: 0.3,
+  },
+  subtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.outline,
+    marginTop: 1,
   },
   rightGroup: {
     flexDirection: 'row',

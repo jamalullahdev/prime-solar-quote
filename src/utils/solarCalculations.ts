@@ -1,10 +1,10 @@
-import { CalculatorSettings, ReturnOnInvestment } from '../types';
+import { CalculatorSettings, ReturnOnInvestment, ProductionData } from '../types';
 
 export const DEFAULT_CALCULATOR_SETTINGS: CalculatorSettings = {
-  ratePerUnitPkr: 45.0, // Blended average PKR/unit
-  unitsPerKwPerDay: 4.5, // Daily solar yield factor
+  ratePerUnitPkr: 65.0, // Client standard tariff (PKR 65 / unit)
+  unitsPerKwPerDay: 5.0, // Client rule: 1kW PV makes 5 units daily
   roundToNearestKw: 0.5,
-  defaultPanelWattage: 585,
+  defaultPanelWattage: 625, // Standard Tier-1 620/625W panels
 };
 
 export interface SolarSystemSizingResult {
@@ -17,6 +17,43 @@ export interface SolarSystemSizingResult {
   estimatedYearlySavingsPkr: number;
   paybackPeriodYears: number;
   roi: ReturnOnInvestment;
+  productionData: ProductionData;
+}
+
+export function calculateProductionData(
+  panelCount: number,
+  panelWattage: number = 625,
+  capacityKwFallback: number = 10,
+  grandTotal: number = 0
+): ProductionData {
+  // Client rule: Panels kW (not Inverter kW) * 5 units daily
+  const totalWattage =
+    panelCount > 0 && panelWattage > 0
+      ? panelCount * panelWattage
+      : capacityKwFallback * 1000;
+
+  const panelKw = totalWattage / 1000;
+  const dailyUnits = Math.round(panelKw * 5);
+  const monthlyUnits = Math.round(dailyUnits * 30);
+  const monthlySavings = Math.round(monthlyUnits * 65);
+
+  const lowSavings = Math.round(monthlySavings * 0.98);
+  const highSavings = Math.round(monthlySavings * 1.025);
+
+  const paybackMonths =
+    monthlySavings > 0 && grandTotal > 0
+      ? Math.round(grandTotal / monthlySavings)
+      : Math.round(18);
+
+  const lowPayback = Math.max(10, Math.round(paybackMonths * 0.9));
+  const highPayback = Math.max(lowPayback + 2, Math.round(paybackMonths * 1.05));
+
+  return {
+    dailyUnitsText: `${dailyUnits} units approx.`,
+    monthlyUnitsText: `${monthlyUnits.toLocaleString('en-US')} units approx.`,
+    monthlySavingsText: `Rs ${formatCurrency(lowSavings)} – ${formatCurrency(highSavings)}`,
+    roiMonthsText: `${lowPayback} – ${highPayback} months`,
+  };
 }
 
 export function calculateSolarSizing(
@@ -24,48 +61,55 @@ export function calculateSolarSizing(
   settings: CalculatorSettings = DEFAULT_CALCULATOR_SETTINGS
 ): SolarSystemSizingResult {
   const bill = Math.max(0, monthlyBillPkr);
-  const rate = settings.ratePerUnitPkr || 45.0;
-  const yieldPerKw = settings.unitsPerKwPerDay || 4.5;
+  const rate = settings.ratePerUnitPkr || 65.0;
+  const yieldPerKw = settings.unitsPerKwPerDay || 5.0;
   const step = settings.roundToNearestKw || 0.5;
-  const panelWattage = settings.defaultPanelWattage || 585;
+  const panelWattage = settings.defaultPanelWattage || 625;
 
-  // 1. Calculate Estimated Units consumed
+  // 1. Calculate Units Consumed (Client reverse formula: Bill / 65)
   const estimatedMonthlyUnits = Math.round(bill / rate);
   const estimatedDailyUnits = estimatedMonthlyUnits / 30.0;
 
-  // 2. Calculate Raw kW needed
+  // 2. Calculate Required Solar kW (Daily Units / 5)
   const rawKw = estimatedDailyUnits / yieldPerKw;
   const recommendedKw = Math.max(step, Math.ceil(rawKw / step) * step);
 
-  // 3. Panel Count Sizing
+  // 3. Panel Count Sizing (Total Wattage / 625W)
   const panelCount = Math.ceil((recommendedKw * 1000) / panelWattage);
+  const totalPvKw = (panelCount * panelWattage) / 1000;
 
   // 4. Expected Generation & Financial Savings
-  const dailyGenUnits = Math.round(recommendedKw * yieldPerKw);
+  const dailyGenUnits = Math.round(totalPvKw * yieldPerKw);
   const monthlyGenUnits = Math.round(dailyGenUnits * 30);
   const estimatedMonthlySavingsPkr = Math.round(monthlyGenUnits * rate);
   const estimatedYearlySavingsPkr = estimatedMonthlySavingsPkr * 12;
 
-  // 5. Estimated System Cost & Payback Estimation (~115k/kW for On-Grid, ~135k/kW for Hybrid average)
-  const estimatedCapex = recommendedKw * 125000;
-  const paybackPeriodYears = estimatedYearlySavingsPkr > 0 
-    ? parseFloat((estimatedCapex / estimatedYearlySavingsPkr).toFixed(1)) 
-    : 2.8;
+  // 5. Estimated System Cost & Payback Estimation
+  const estimatedCapex = recommendedKw * 135000;
+  const paybackPeriodYears =
+    estimatedYearlySavingsPkr > 0
+      ? parseFloat((estimatedCapex / estimatedYearlySavingsPkr).toFixed(1))
+      : 1.8;
 
-  const lowDaily = Math.round(dailyGenUnits * 0.9);
-  const highDaily = Math.round(dailyGenUnits * 1.1);
-  const lowMonthly = Math.round(monthlyGenUnits * 0.9);
-  const highMonthly = Math.round(monthlyGenUnits * 1.1);
-  const lowSavings = Math.round(estimatedMonthlySavingsPkr * 0.9);
-  const highSavings = Math.round(estimatedMonthlySavingsPkr * 1.1);
-  const lowMonths = Math.max(12, Math.round(paybackPeriodYears * 12 * 0.9));
-  const highMonths = Math.max(14, Math.round(paybackPeriodYears * 12 * 1.1));
+  const paybackMonths = Math.round(paybackPeriodYears * 12);
+  const lowMonths = Math.max(12, Math.round(paybackMonths * 0.9));
+  const highMonths = Math.max(lowMonths + 2, Math.round(paybackMonths * 1.1));
+
+  const lowSavings = Math.round(estimatedMonthlySavingsPkr * 0.98);
+  const highSavings = Math.round(estimatedMonthlySavingsPkr * 1.025);
 
   const roi: ReturnOnInvestment = {
-    dailyProductionUnits: `${lowDaily} - ${highDaily} Units`,
-    monthlyProductionUnits: `${lowMonthly.toLocaleString()} - ${highMonthly.toLocaleString()} Units`,
-    monthlySavingsPkr: `Rs. ${lowSavings.toLocaleString()} - ${highSavings.toLocaleString()}`,
-    paybackPeriodMonths: `${lowMonths} - ${highMonths} Months (~${paybackPeriodYears} Years)`,
+    dailyProductionUnits: `${dailyGenUnits} units approx.`,
+    monthlyProductionUnits: `${monthlyGenUnits.toLocaleString('en-US')} units approx.`,
+    monthlySavingsPkr: `Rs ${formatCurrency(lowSavings)} – ${formatCurrency(highSavings)}`,
+    paybackPeriodMonths: `${lowMonths} – ${highMonths} months`,
+  };
+
+  const productionData: ProductionData = {
+    dailyUnitsText: `${dailyGenUnits} units approx.`,
+    monthlyUnitsText: `${monthlyGenUnits.toLocaleString('en-US')} units approx.`,
+    monthlySavingsText: `Rs ${formatCurrency(lowSavings)} – ${formatCurrency(highSavings)}`,
+    roiMonthsText: `${lowMonths} – ${highMonths} months`,
   };
 
   return {
@@ -78,6 +122,7 @@ export function calculateSolarSizing(
     estimatedYearlySavingsPkr,
     paybackPeriodYears,
     roi,
+    productionData,
   };
 }
 

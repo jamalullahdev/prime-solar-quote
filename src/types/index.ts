@@ -1,5 +1,7 @@
 export type SystemType = 'HYBRID' | 'ON_GRID' | 'OFF_GRID';
 
+export type FormatKind = 'SIMPLE_HYBRID' | 'GRAND_HYBRID' | 'ON_GRID' | 'CUSTOM';
+
 export type ColumnType = 'TEXT' | 'NUMBER' | 'CURRENCY' | 'AUTO_CALCULATED';
 
 export interface TemplateColumn {
@@ -25,6 +27,8 @@ export interface BatteryOption {
   id: string;
   brand: string;
   capacityKwh: number;
+  voltage?: string; // default "51.2V"
+  ampHours?: string; // e.g. "100Ah", "200Ah", "314Ah"
   rate: number;
   warranty: string;
 }
@@ -36,16 +40,24 @@ export interface PaymentTerms {
 }
 
 export interface ReturnOnInvestment {
-  dailyProductionUnits: string; // e.g. "45 - 50 Units"
-  monthlyProductionUnits: string; // e.g. "1,350 - 1,500 Units"
-  monthlySavingsPkr: string; // e.g. "60,000 - 70,000"
-  paybackPeriodMonths: string; // e.g. "24 - 30 Months (2.5 Years)"
+  dailyProductionUnits: string; // e.g. "100 units approx."
+  monthlyProductionUnits: string; // e.g. "3,000 units approx."
+  monthlySavingsPkr: string; // e.g. "Rs 195,000 – 200,000"
+  paybackPeriodMonths: string; // e.g. "18 – 20 months"
+}
+
+export interface ProductionData {
+  dailyUnitsText: string; // e.g. "100 units approx."
+  monthlyUnitsText: string; // e.g. "3,000 units approx."
+  monthlySavingsText: string; // e.g. "Rs 195,000 – 200,000"
+  roiMonthsText: string; // e.g. "18 – 20 months"
 }
 
 export interface TemplateDefinition {
   id: string;
   name: string;
   description?: string;
+  formatKind?: FormatKind;
   systemTypeDefault?: SystemType;
   columns: TemplateColumn[];
   defaultLineItems: LineItem[];
@@ -68,8 +80,9 @@ export interface Quotation {
   quotationNumber: string; // e.g. "PS-2026-084"
   templateId: string;
   templateName: string;
+  formatKind?: FormatKind;
   customer: Customer;
-  capacityKw: string; // e.g. "10", "15"
+  capacityKw: string; // e.g. "10", "20"
   systemType: SystemType;
   panelBrand: string;
   panelWattage: string;
@@ -80,6 +93,7 @@ export interface Quotation {
   selectedBatteryId?: string;
   paymentTerms: PaymentTerms;
   roi: ReturnOnInvestment;
+  productionData?: ProductionData;
   validTill: string; // e.g. "25/09/2026"
   subtotal: number;
   taxRate: number; // default 0%
@@ -91,8 +105,8 @@ export interface Quotation {
 }
 
 export interface CalculatorSettings {
-  ratePerUnitPkr: number; // default 45.0 Rs/unit
-  unitsPerKwPerDay: number; // default 4.5 units/kW/day
+  ratePerUnitPkr: number; // default 65.0 Rs/unit
+  unitsPerKwPerDay: number; // default 5.0 units/kW/day
   roundToNearestKw: number; // default 0.5 kW
-  defaultPanelWattage: number; // default 585 W
+  defaultPanelWattage: number; // default 625 W
 }
